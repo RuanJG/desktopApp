@@ -9,8 +9,10 @@
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow),
+    mSerialport(NULL),
     mSerialMutex(),
-    mCoder()
+    mDecoder(),
+    mEncoder()
 {
     ui->setupUi(this);
     ui->currentMaxLineEdit->setText(tr("1000"));
@@ -20,8 +22,6 @@ MainWindow::MainWindow(QWidget *parent) :
     on_setcurrentButton_clicked();
     on_setVolumeButton_clicked();
 
-
-    mSerialport = NULL;
     update_serial_info();
 }
 
@@ -32,13 +32,15 @@ MainWindow::~MainWindow()
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
-    QMessageBox::warning(NULL, "warning", "press 'Save and Close' Botton to quit ", QMessageBox::Yes, QMessageBox::Yes);
-    event->ignore();
+    on_save_close_Button_clicked();
+    event->accept();
 }
 
 void MainWindow::on_save_close_Button_clicked()
 {
     close_serial();
+    //TODO save file
+
     qApp->quit();
 }
 
@@ -66,10 +68,16 @@ void MainWindow::update_serial_info()
 
 }
 
+
+
 void MainWindow::on_pushButton_3_clicked()
 {
     update_serial_info();
 }
+
+
+
+
 
 bool MainWindow::open_serial_dev(QString portname)
 {
@@ -77,7 +85,7 @@ bool MainWindow::open_serial_dev(QString portname)
 
     mSerialport = new QSerialPort();
     mSerialport->setPortName(portname);
-    mSerialport->setBaudRate(QSerialPort::Baud115200,QSerialPort::AllDirections);
+    mSerialport->setBaudRate(QSerialPort::Baud57600,QSerialPort::AllDirections);
     mSerialport->setDataBits(QSerialPort::Data8);
     mSerialport->setParity(QSerialPort::NoParity);
     mSerialport->setStopBits(QSerialPort::OneStop);
@@ -107,7 +115,7 @@ bool MainWindow::open_serial()
     }
 
 
-    connect( mSerialport,SIGNAL(readyRead()),this, SLOT(on_Serial_ReadReady()) );
+    connect( mSerialport,SIGNAL(readyRead()),this, SLOT(solt_mSerial_ReadReady()) );
     return true;
 }
 
@@ -124,6 +132,39 @@ void MainWindow::close_serial()
     }
 }
 
+void MainWindow::solt_mSerial_ReadReady()
+{
+    if(mSerialport == NULL){
+        qDebug() << "on_Serial_ReadReady: Something bad happend !!" << endl;
+        return;
+    }
+
+    mSerialMutex.lock();
+    QByteArray arr = mSerialport->readAll();
+    mSerialMutex.unlock();
+
+    handle_Serial_Data( arr );
+}
+
+
+void MainWindow::serial_send_packget( const Chunk &chunk)
+{
+    mSerialMutex.lock();
+
+    if( mSerialport != NULL && mSerialport->isOpen()){
+        Chunk pChunk;
+        if ( mEncoder.encode(chunk.getData(),chunk.getSize(),pChunk) ){
+            int count = mSerialport->write( (const char*) pChunk.getData(), pChunk.getSize() );
+            if( count != pChunk.getSize() ){
+                qDebug() << "serial_send_packget: send data to serial false \n" << endl;
+            }
+        }
+    }
+
+    mSerialMutex.unlock();
+
+}
+
 
 
 void MainWindow::on_SerialButton_clicked()
@@ -138,28 +179,111 @@ void MainWindow::on_SerialButton_clicked()
     }
 }
 
-void MainWindow::on_Serial_ReadReady()
-{
-    if(mSerialport == NULL){
-        qDebug() << "on_Serial_ReadReady: Something bad happend !!" << endl;
-        return;
-    }
 
-    mSerialMutex.lock();
-    QByteArray arr = mSerialport->readAll();
-    mSerialMutex.unlock();
-
-    handle_Serial_Data( arr );
-}
 
 void MainWindow::handle_Serial_Data( QByteArray &bytes )
 {
     std::list<Chunk> packgetList;
 
-    mCoder.decode((unsigned char *)bytes.data(),bytes.count(), packgetList);
+    mDecoder.decode((unsigned char *)bytes.data(),bytes.count(), packgetList);
+
+    qDebug() << "receive: " << bytes.count() << endl;
+
+    std::list<Chunk>::iterator iter;
+    for (iter = packgetList.begin(); iter != packgetList.end(); ++iter) {
+        const unsigned char *p = iter->getData();
+        int cnt = iter->getSize();
+
+        handle_device_message( p,cnt );
+    }
+
 }
 
+// packget  head tag
+#define USER_DATA_TAG	1
+#define USER_LOG_TAG	2
+#define USER_START_TAG  3
+#define USER_CMD_CHMOD_TAG  4
+#define USER_CMD_CURRENT_MAXMIN_TAG 5
+#define USER_CMD_VOICE_MAXMIN_TAG   6
 
+//packget body : result error value
+#define USER_RES_CURRENT_FALSE_FLAG 1
+#define USER_RES_VOICE_FALSE_FLAG 2
+#define USER_RES_ERROR_FLAG 4
+
+//work_mode value
+#define USER_MODE_ONLINE 1
+#define USER_MODE_OFFLINE 2
+
+
+void MainWindow::handle_device_message( const unsigned char *data, int len )
+{
+    //head tag
+    switch(data[0]){
+
+    case USER_DATA_TAG:{
+        //tag[0]+db[0]db[1]db[2]db[3]+current[....]+work_current[0]+error[0]
+        if( len != 11 )
+            return;
+
+        int db, value,count,error;
+        float current;
+        memcpy((char*)&db, data+1, 4);
+        memcpy( (char*)&current , data+5 , 4);
+        count = data[9];
+        error = data[10];
+
+        value = current*1000;
+
+        ui->CurrentprogressBar->setValue( value > ui->CurrentprogressBar->maximum()? ui->CurrentprogressBar->maximum():value );
+        ui->VolumeprogressBar->setValue(db>ui->VolumeprogressBar->maximum()? ui->VolumeprogressBar->maximum():db);
+
+
+
+        QString res = "unknow 未知";
+        if( error == 0 ){
+            res = tr("Pass: 合格");
+        }else if( error & USER_RES_ERROR_FLAG ){
+            res = tr("Error: 测量通信失败");
+        }else{
+            res = tr("False: ");
+            if( (error & USER_RES_CURRENT_FALSE_FLAG) != 0 )
+                res += tr("Current Hight 电流过大");
+            if( (error & USER_RES_VOICE_FALSE_FLAG) != 0 )
+                res += tr("Voice False 噪声过大");
+        }
+        ui->resultLable->setText(res);
+
+
+
+        ui->textBrowser->append("db="+QString::number(db) +"db, current="+QString::number(value)+"mA, count=" + QString::number(count) +
+                                ", error="+ QString::number(error) );
+        qDebug() << "db=" <<db <<"db, current=" <<current <<endl;
+
+        break;
+    }
+
+    case USER_LOG_TAG:{
+        QString str = QString::fromUtf8( (const char*)(data+1), len-1);
+        ui->textBrowser->append(str);
+        break;
+    }
+
+    case USER_START_TAG:{
+        ui->textBrowser->clear();
+        ui->resultLable->setText(tr("unknow 未知"));
+        ui->textBrowser->append("start:");
+        break;
+    }
+
+    default:{
+        ui->textBrowser->append("unknow message!!!");
+        break;
+    }
+
+    }
+}
 
 
 
@@ -182,6 +306,17 @@ void MainWindow::on_setcurrentButton_clicked()
     if( max > min){
         ui->CurrentprogressBar->setMaximum(max);
         ui->CurrentprogressBar->setMinimum(min);
+
+        //tag+max+min
+        //send to device
+        Chunk chunk;
+        float Amax,Amin;
+        Amax = (float)max/1000;
+        Amin = (float)min/1000;
+        chunk.append( USER_CMD_CURRENT_MAXMIN_TAG );
+        chunk.append( (const unsigned char *)&Amax, 4);
+        chunk.append( (const unsigned char *)&Amin, 4);
+        serial_send_packget( chunk );
     }
 }
 
@@ -192,5 +327,17 @@ void MainWindow::on_setVolumeButton_clicked()
     if( max > min){
         ui->VolumeprogressBar->setMaximum(max);
         ui->VolumeprogressBar->setMinimum(min);
+
+        //send to device
+        Chunk chunk;
+        chunk.append( USER_CMD_VOICE_MAXMIN_TAG );
+        chunk.append( (const unsigned char *)&max, 4);
+        chunk.append( (const unsigned char *)&min, 4);
+        serial_send_packget( chunk );
     }
+}
+
+void MainWindow::on_ClearTextBrowButton_clicked()
+{
+    ui->textBrowser->clear();
 }

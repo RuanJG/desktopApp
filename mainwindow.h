@@ -28,23 +28,28 @@ private slots:
 
     void on_SerialButton_clicked();
 
-    void on_Serial_ReadReady();
+    void solt_mSerial_ReadReady();
 
     void on_setcurrentButton_clicked();
 
     void on_setVolumeButton_clicked();
 
+    void on_ClearTextBrowButton_clicked();
+
 private:
     Ui::MainWindow *ui;
     QSerialPort *mSerialport;
     QMutex mSerialMutex;
-    UartCoder mCoder;
+    UartCoder mDecoder;
+    UartCoder mEncoder;
 
     void update_serial_info();
     void close_serial();
     bool open_serial();
     bool open_serial_dev(QString portname);
     void handle_Serial_Data(QByteArray &bytes);
+    void handle_device_message(const unsigned char *data, int len);
+    void serial_send_packget(const Chunk &chunk);
 };
 
 #endif // MAINWINDOW_H
