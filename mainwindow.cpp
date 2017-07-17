@@ -12,7 +12,10 @@ MainWindow::MainWindow(QWidget *parent) :
     mSerialport(NULL),
     mSerialMutex(),
     mDecoder(),
-    mEncoder()
+    mEncoder(),
+    mExcel(),
+    mExcelCurrentRow(1),
+    mExcelCurrentColumn(1)
 {
     ui->setupUi(this);
     ui->currentMaxLineEdit->setText(tr("1000"));
@@ -23,10 +26,13 @@ MainWindow::MainWindow(QWidget *parent) :
     on_setVolumeButton_clicked();
 
     update_serial_info();
+
 }
 
 MainWindow::~MainWindow()
 {
+    if( mExcel.IsValid() )
+        mExcel.Close();
     delete ui;
 }
 
@@ -40,7 +46,8 @@ void MainWindow::on_save_close_Button_clicked()
 {
     close_serial();
     //TODO save file
-
+    if( mExcel.IsValid())
+        mExcel.Close();
     qApp->quit();
 }
 
@@ -240,26 +247,29 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
         ui->VolumeprogressBar->setValue(db>ui->VolumeprogressBar->maximum()? ui->VolumeprogressBar->maximum():db);
 
 
+        saveRecordToExcel(db, QString::number(current), count, error );
+
 
         QString res = "unknow 未知";
         if( error == 0 ){
-            res = tr("Pass: 合格");
+            res = tr("Pass 合格");
         }else if( error & USER_RES_ERROR_FLAG ){
             res = tr("Error: 测量通信失败");
         }else{
             res = tr("False: ");
             if( (error & USER_RES_CURRENT_FALSE_FLAG) != 0 )
-                res += tr("Current Hight 电流过大");
+                res += tr("Current Hight 电流过大,");
             if( (error & USER_RES_VOICE_FALSE_FLAG) != 0 )
-                res += tr("Voice False 噪声过大");
+                res += tr("Noise Hight 噪声过大,");
+
         }
         ui->resultLable->setText(res);
-
-
-
         ui->textBrowser->append("db="+QString::number(db) +"db, current="+QString::number(value)+"mA, count=" + QString::number(count) +
                                 ", error="+ QString::number(error) );
         qDebug() << "db=" <<db <<"db, current=" <<current <<endl;
+
+
+
 
         break;
     }
@@ -271,7 +281,7 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
     }
 
     case USER_START_TAG:{
-        ui->textBrowser->clear();
+        //ui->textBrowser->clear();
         ui->resultLable->setText(tr("unknow 未知"));
         ui->textBrowser->append("start:");
         break;
@@ -290,7 +300,85 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
 
 
 
+void MainWindow::saveRecordToExcel(int db, QString current, int count, int error)
+{
+    bool newsheet = false;
 
+    if( ! mExcel.IsValid() || ! mExcel.IsOpen() ){
+
+        QString filename = "T-REX-Report_"+QDateTime::currentDateTime().toString("yyyy-MM-dd_hh-mm-ss")+".xlsx";
+        filename =QDir::toNativeSeparators( QDir::currentPath()+"\/"+filename );
+        if( !mExcel.Open(filename,1,true) ){
+            QMessageBox::warning(this,"Warning",tr("打开Excel文档失败"));
+            return;
+        }
+        newsheet = true;
+    }
+
+    if( false && mExcelCurrentRow >= mExcel.GetRowCount() ){
+        unsigned int sheetid = mExcel.getCurrentSheetId();
+        if( sheetid >= mExcel.getSheetCount() ){
+            QMessageBox::warning(this,"Error",tr("Excel文档己经填满，请保存数据后重新开始程序"));
+            return;
+        }
+        if( !mExcel.openWorkSheet( sheetid+1 ) ){
+            QMessageBox::warning(this,"Warning",tr("打开Excel文档的新Sheet页失败"));
+            return;
+        }
+        newsheet = true;
+    }
+
+    if( newsheet ){
+        mExcelCurrentRow = mExcel.getStartRow();
+        if( mExcel.SetCellData(mExcelCurrentRow, 1, "Noise(DB)") \
+                && mExcel.SetCellData(mExcelCurrentRow, 2, "Current(A)") \
+                && mExcel.SetCellData(mExcelCurrentRow, 3, "测量次数") \
+                && mExcel.SetCellData(mExcelCurrentRow, 4, "Result"))
+        {
+            mExcelCurrentRow++;
+        }else{
+            QMessageBox::warning(this,"Warning",tr("Excel文档写入标题失败"));
+            return;
+        }
+    }
+
+
+    //不统计通信失败的测试，如果要加入，删除以下判断
+    if( error & USER_RES_ERROR_FLAG )
+        return;
+
+    //插入到excel表
+    QString res = "unknow 未知";
+    if( error == 0 ){
+        res = tr("Pass 合格");
+    }else if( error & USER_RES_ERROR_FLAG ){
+        res = tr("Error: 测量无效,通信失败");
+    }else{
+        res = tr("False: ");
+        if( (error & USER_RES_CURRENT_FALSE_FLAG) != 0 )
+            res += tr("Current Hight 电流过大,");
+        if( (error & USER_RES_VOICE_FALSE_FLAG) != 0 )
+            res += tr("Noise Hight 噪声过大,");
+
+    }
+
+    if( mExcel.SetCellData(mExcelCurrentRow, 1, db) \
+            && mExcel.SetCellData(mExcelCurrentRow, 2, current) \
+            && mExcel.SetCellData(mExcelCurrentRow, 3, count) \
+            && mExcel.SetCellData(mExcelCurrentRow, 4, res))
+    {
+        if( error == 0){
+            mExcel.setCellBackgroundColor(mExcelCurrentRow,4,QColor(0,255,0));
+        }else{
+            mExcel.setCellBackgroundColor(mExcelCurrentRow,4,QColor(255,0,0));
+        }
+        mExcelCurrentRow ++;
+    }else{
+        QMessageBox::warning(this,"Warning",tr("保存数据失败"));
+    }
+
+
+}
 
 
 
@@ -340,4 +428,6 @@ void MainWindow::on_setVolumeButton_clicked()
 void MainWindow::on_ClearTextBrowButton_clicked()
 {
     ui->textBrowser->clear();
+    saveRecordToExcel(0, QString::number(0.7), 4, 1);
+
 }

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>690</width>
-    <height>716</height>
+    <width>988</width>
+    <height>635</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -19,22 +19,6 @@
      <layout class="QHBoxLayout" name="horizontalLayout">
       <item>
        <layout class="QVBoxLayout" name="verticalLayout">
-        <item>
-         <widget class="QPushButton" name="ClearTextBrowButton">
-          <property name="maximumSize">
-           <size>
-            <width>100</width>
-            <height>16777215</height>
-           </size>
-          </property>
-          <property name="text">
-           <string>Clear 清除</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QTextBrowser" name="textBrowser"/>
-        </item>
         <item>
          <widget class="QGroupBox" name="groupBox_4">
           <property name="sizePolicy">
@@ -79,7 +63,7 @@
            <item row="2" column="0">
             <widget class="QLabel" name="label_6">
              <property name="text">
-              <string>Volume  音量</string>
+              <string>Noise 噪声</string>
              </property>
             </widget>
            </item>
@@ -135,6 +119,47 @@
               </size>
              </property>
             </spacer>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="groupBox_6">
+          <property name="maximumSize">
+           <size>
+            <width>16777215</width>
+            <height>12341234</height>
+           </size>
+          </property>
+          <property name="title">
+           <string>GroupBox</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignBottom|Qt::AlignLeading|Qt::AlignLeft</set>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_8">
+           <item>
+            <widget class="QPushButton" name="ClearTextBrowButton">
+             <property name="maximumSize">
+              <size>
+               <width>100</width>
+               <height>16777215</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>Clear 清除</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextBrowser" name="textBrowser">
+             <property name="maximumSize">
+              <size>
+               <width>16777215</width>
+               <height>123456</height>
+              </size>
+             </property>
+            </widget>
            </item>
           </layout>
          </widget>
@@ -321,7 +346,7 @@
            </size>
           </property>
           <property name="title">
-           <string>Volume 音量</string>
+           <string>Noise 噪声</string>
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_6">
            <item>
@@ -467,7 +492,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>690</width>
+     <width>988</width>
      <height>26</height>
     </rect>
    </property>

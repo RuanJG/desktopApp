@@ -6,6 +6,7 @@
 #include <QMutex>
 #include <uartcoder.h>
 #include <chunk.h>
+#include "excelengine.h"
 
 namespace Ui {
 class MainWindow;
@@ -42,6 +43,9 @@ private:
     QMutex mSerialMutex;
     UartCoder mDecoder;
     UartCoder mEncoder;
+    ExcelEngine mExcel; //创建excl对象
+    unsigned int mExcelCurrentRow;
+    unsigned int mExcelCurrentColumn;
 
     void update_serial_info();
     void close_serial();
@@ -50,6 +54,7 @@ private:
     void handle_Serial_Data(QByteArray &bytes);
     void handle_device_message(const unsigned char *data, int len);
     void serial_send_packget(const Chunk &chunk);
+    void saveRecordToExcel(int db, QString current, int count, int error);
 };
 
 #endif // MAINWINDOW_H
