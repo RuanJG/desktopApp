@@ -9,12 +9,14 @@ ExcelEngine::ExcelEngine()
     pWorksheet = NULL;
 
     sXlsFile     = "";
-    nRowCount    = 0;
-    nColumnCount = 0;
-    nStartRow    = 0;
-    nStartColumn = 0;
+    mUsedRagneRowCount    = 0;
+    mUsedRagneColumnCount = 0;
+    mUsedRagneStartRow    = 0;
+    mUsedRagneStartColumn = 0;
     mWorkSheetCount = 0;
-    mCurrentSheetId = 1;
+    mCurrentSheetId = 0;
+    mMaxColumnCount = 0;
+    mMaxRowCount = 0;
 
     bIsOpen     = false;
     bIsValid    = false;
@@ -53,7 +55,6 @@ bool ExcelEngine::Open(unsigned int nSheet, bool visible, QString type)
         Close();
     }
 
-    mCurrentSheetId = nSheet;
     bIsVisible = visible;
 
     if ( NULL == pExcel )
@@ -108,7 +109,7 @@ bool ExcelEngine::Open(unsigned int nSheet, bool visible, QString type)
         pWorkbook  = pExcel->querySubObject("ActiveWorkBook"); //新建一个xls
     }
 
-    if( openWorkSheet( mCurrentSheetId ) )
+    if( openWorkSheet( nSheet ) )
         bIsOpen = true;
     else
         bIsOpen  = false;
@@ -122,10 +123,8 @@ bool ExcelEngine::Open(unsigned int nSheet, bool visible, QString type)
 bool ExcelEngine::Open(QString xlsFile, unsigned int nSheet, bool visible , QString type)
 {
     sXlsFile = xlsFile;
-    mCurrentSheetId = nSheet;
     bIsVisible = visible;
-
-    return Open(mCurrentSheetId,bIsVisible,type);
+    return Open(nSheet,bIsVisible,type);
 }
 
 
@@ -257,14 +256,14 @@ bool ExcelEngine::ReadDataToTable(QTableWidget *tableWidget)
         tableWidget->removeColumn(0);
     }
 
-    int rowcnt    = nStartRow + nRowCount;
-    int columncnt = nStartColumn + nColumnCount;
+    int rowcnt    = mUsedRagneStartRow + mUsedRagneRowCount;
+    int columncnt = mUsedRagneStartColumn + mUsedRagneColumnCount;
 
     //获取excel中的第一行数据作为表头
     QStringList headerList;
-    for (int n = nStartColumn; n<columncnt; n++ )
+    for (int n = mUsedRagneStartColumn; n<columncnt; n++ )
     {
-        QAxObject * cell = pWorksheet->querySubObject("Cells(int,int)",nStartRow, n);
+        QAxObject * cell = pWorksheet->querySubObject("Cells(int,int)",mUsedRagneStartRow, n);
         if ( cell )
         {
             headerList<<cell->dynamicCall("Value2()").toString();
@@ -272,15 +271,15 @@ bool ExcelEngine::ReadDataToTable(QTableWidget *tableWidget)
     }
 
     //重新创建表头
-    tableWidget->setColumnCount(nColumnCount);
+    tableWidget->setColumnCount(mUsedRagneColumnCount);
     tableWidget->setHorizontalHeaderLabels(headerList);
 
 
     //插入新数据
-    for (int i = nStartRow+1, r = 0; i < rowcnt; i++, r++ )  //行
+    for (int i = mUsedRagneStartRow+1, r = 0; i < rowcnt; i++, r++ )  //行
     {
         tableWidget->insertRow(r); //插入新行
-        for (int j = nStartColumn, c = 0; j < columncnt; j++, c++ )  //列
+        for (int j = mUsedRagneStartColumn, c = 0; j < columncnt; j++, c++ )  //列
         {
             QAxObject * cell = pWorksheet->querySubObject("Cells(int,int)", i, j );//获取单元格
 
@@ -404,17 +403,23 @@ bool ExcelEngine::openWorkSheet( unsigned int id )
         return false;
     }
 
+    mCurrentSheetId = id;
+
     //至此已打开，开始获取相应属性
+    //因为excel可以从任意行列填数据而不一定是从0,0开始，因此要获取首行列下标
     QAxObject *usedrange = pWorksheet->querySubObject("UsedRange");//获取该sheet的使用范围对象
     QAxObject *rows = usedrange->querySubObject("Rows");
     QAxObject *columns = usedrange->querySubObject("Columns");
+    mUsedRagneStartRow    = usedrange->property("Row").toInt();    //第一行的起始位置
+    mUsedRagneStartColumn = usedrange->property("Column").toInt(); //第一列的起始位置
+    mUsedRagneRowCount    = rows->property("Count").toInt();       //获取行数
+    mUsedRagneColumnCount = columns->property("Count").toInt();    //获取列数
 
-    //因为excel可以从任意行列填数据而不一定是从0,0开始，因此要获取首行列下标
-    nStartRow    = usedrange->property("Row").toInt();    //第一行的起始位置
-    nStartColumn = usedrange->property("Column").toInt(); //第一列的起始位置
-
-    nRowCount    = rows->property("Count").toInt();       //获取行数
-    nColumnCount = columns->property("Count").toInt();    //获取列数
+    //get max row/column count
+    rows = pWorksheet->querySubObject("Rows");
+    columns = pWorksheet->querySubObject("Columns");
+    mMaxRowCount    = rows->property("Count").toInt();       //获取行数
+    mMaxColumnCount = columns->property("Count").toInt();    //获取列数
 
     return true;
 }
@@ -444,27 +449,27 @@ bool ExcelEngine::IsValid()
 /**
   *@brief 获取excel的行数
   */
-unsigned int ExcelEngine::GetRowCount()const
+unsigned int ExcelEngine::GetUsedRagneRowCount()const
 {
-    return nRowCount;
+    return mUsedRagneRowCount;
 }
 
-unsigned int ExcelEngine::getStartRow()
+unsigned int ExcelEngine::getUsedRagneStartRow()
 {
-    return nStartRow;
+    return mUsedRagneStartRow;
 }
 
 /**
   *@brief 获取excel的列数
   */
-unsigned int ExcelEngine::GetColumnCount()const
+unsigned int ExcelEngine::GetUsedRagneColumnCount()const
 {
-    return nColumnCount;
+    return mUsedRagneColumnCount;
 }
 
-unsigned int ExcelEngine::getStartColumn()
+unsigned int ExcelEngine::getUsedRagneStartColumn()
 {
-    return nStartColumn;
+    return mUsedRagneStartColumn;
 }
 
 
@@ -476,4 +481,15 @@ unsigned int ExcelEngine::getCurrentSheetId()
 unsigned int ExcelEngine::getSheetCount()
 {
     return mWorkSheetCount;
+}
+
+unsigned int ExcelEngine::getMaxRowCount()
+{
+    return mMaxRowCount;
+}
+
+
+unsigned int ExcelEngine::getMaxColumnCount()
+{
+    return mMaxColumnCount;
 }

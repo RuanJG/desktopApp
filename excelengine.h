@@ -48,20 +48,21 @@ public:
     QVariant GetCellData(unsigned int row, unsigned int column);                //获取指定单元数据
     bool     SetCellData(unsigned int row, unsigned int column, QVariant data); //修改指定单元数据
 
-    unsigned int GetRowCount()const;
-    unsigned int GetColumnCount()const;
+    unsigned int GetUsedRagneRowCount()const;
+    unsigned int GetUsedRagneColumnCount()const;
 
     bool IsOpen();
     bool IsValid();
 
-    unsigned int getStartRow();
-    unsigned int getStartColumn();
+    unsigned int getUsedRagneStartRow();
+    unsigned int getUsedRagneStartColumn();
     unsigned int getCurrentSheetId();
     unsigned int getSheetCount();
     bool setCellBackgroundColor(unsigned int row, unsigned int column, QColor color);
     bool setCellFontColor(unsigned int row, unsigned int column, QColor color);
     bool openWorkSheet(unsigned int id);
-
+    unsigned int getMaxRowCount();
+    unsigned int getMaxColumnCount();
 
 
 private:
@@ -78,12 +79,13 @@ private:
 
     QAxObject *pWorksheet;  //指向工作簿中的某个sheet表单
     unsigned int      mCurrentSheetId;   //当前打开的第几个sheet
-    unsigned int mWorkSheetCount;
-    unsigned int       nRowCount;    //行数
-    unsigned int       nColumnCount; //列数
-    unsigned int       nStartRow;    //开始有数据的行下标值
-    unsigned int       nStartColumn; //开始有数据的列下标值
-
+    unsigned int       mWorkSheetCount;
+    unsigned int       mUsedRagneRowCount;    //行数
+    unsigned int       mUsedRagneColumnCount; //列数
+    unsigned int       mUsedRagneStartRow;    //开始有数据的行下标值
+    unsigned int       mUsedRagneStartColumn; //开始有数据的列下标值
+    unsigned int       mMaxRowCount;
+    unsigned int       mMaxColumnCount;
 
 };
 
