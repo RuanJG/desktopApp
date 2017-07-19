@@ -103,6 +103,12 @@ bool IapMaster::iapStart(string filepath)
     stringstream ss;
     ss<< "read iap File " << mFirmwareSize <<" bytes";
     iapEvent(EVENT_TYPE_STATUS, ss.str());
+
+    //iap start packget
+    sendStartPackget();
+    iapEvent(EVENT_TYPE_STATUS, "iap start..."  );
+    mTimeOutMs = 200;
+
     return true;
 }
 
@@ -160,11 +166,12 @@ void IapMaster::handle_device_message ( const unsigned char *data, int len)
     switch(data[0]){
 
     case PACKGET_ACK_ID:{
+        // ack from devices
         if( len != 3 )
             break;
         mAckPkg.type = data[1];
         mAckPkg.value = data[2];
-        mAckPkg.valid = true;
+        iapServer(mAckPkg);
         break;
     }
 
@@ -175,131 +182,128 @@ void IapMaster::handle_device_message ( const unsigned char *data, int len)
 }
 
 
-
-void IapMaster::iapTick(int intervalMs)
+void IapMaster::iapServer( IapAckPackget &ack )
 {
-    if( mStep == STEP_IDEL )
+    if( ack.type == PACKGET_ACK_FALSE ){
+        string res;
+
+        switch(ack.value){
+        case PACKGET_ACK_FALSE_ERASE_ERROR:{
+            res = "Erase false";
+            break;
+        }
+        case PACKGET_ACK_FALSE_PROGRAM_ERROR:{
+            res = "program false";
+            break;
+        }
+        case PACKGET_ACK_FALSE_SEQ_FALSE:{
+            res = "seq false";
+            break;
+        }
+        default:{
+            stringstream ss;
+            ss << "iap : unknow false ack=" << ack.type << "," <<ack.value ;
+            res = ss.str();
+            break;
+        }
+        }
+
+        iapEvent(EVENT_TYPE_FALSE, res);
+        iapStop();
         return;
-
-    mTimeOutMs += intervalMs;
-
-    if( mStep == STEP_START ){
-        if( mAckPkg.valid ){
-            if( mAckPkg.type == PACKGET_ACK_OK && mAckPkg.value == PACKGET_START_ID ){
-                //this is a ack for start packget
-                setStep( STEP_DATA );
-                iapEvent(EVENT_TYPE_STARTED, "");
-                mAckPkg.valid = false;
-                mTimeOutMs = 0;
-                //return;
-            }
-        }
-        if( mTimeOutMs >= 500 ){
-            //make sure 500 ms is enought time for ack comeback
-            sendStartPackget();
-            //iapEvent(EVENT_TYPE_STATUS, "."  );
-            mTimeOutMs = 0;
-        }
     }
 
-    if( mStep == STEP_DATA ){
-        if( mCurrentSize == 0 ){
-            size_t len  = 100;
-            sendDataPackget( mFirmwareBuffer+mCurrentSize , len );
-            mCurrentSize += len;
-        }
-        if( mAckPkg.valid ){
-            if( mAckPkg.type == PACKGET_ACK_OK && mAckPkg.value == PACKGET_DATA_ID ){
-                //this is a ack for data packget
-                size_t len  = 100;
-                len =  len <= (mFirmwareSize - mCurrentSize) ? len:(mFirmwareSize - mCurrentSize);
-                if( len > 0){
-                    sendDataPackget( mFirmwareBuffer+mCurrentSize , len );
-                    mCurrentSize += len;
 
+    if( ack.type == PACKGET_ACK_RESTART ){
+        iapReset();
+        sendStartPackget();
+        iapEvent(EVENT_TYPE_STATUS, "iap restart..."  );
+        mTimeOutMs = 200;
+        return;
+    }
+
+    if( ack.type == PACKGET_ACK_OK ){
+
+        switch (mStep) {
+        case STEP_START:{
+            if( PACKGET_START_ID == ack.value ){
+                mCurrentSize = 0 ;
+                mCurrentDataSeq = 0;
+                sendDataPackget();
+                mStep = STEP_DATA;
+                mTimeOutMs = 1000;
+                iapEvent(EVENT_TYPE_STARTED, "");
+            }else{
+                stringstream ss;
+                ss << "iap : STEP_START unknow ack" ;
+                iapEvent(EVENT_TYPE_STATUS, ss.str()  );
+            }
+            break;
+        }
+        case STEP_DATA:{
+            if( PACKGET_DATA_ID == ack.value ){
+                if( mCurrentSize == mFirmwareSize ){
+                    //to jump step
+                    sendJumpPackget();
+                    mStep = STEP_JUMP;
+                    mTimeOutMs = 1000;
+                }else{
+                    //send next data
+                    sendDataPackget();
+                    mTimeOutMs = 1000;
                     std::stringstream  sss;
                     sss << "send " << mCurrentSize << "/" << mFirmwareSize ;
                     iapEvent(EVENT_TYPE_STATUS, sss.str()  );
-                }else{
-                    //finish
-                    setStep( STEP_JUMP );
-                    sendJumpPackget();
                 }
-
-                mTimeOutMs = 0;
-                //return;
             }else{
-
-                iapStop();
-
-                string res;
-                if( mAckPkg.type == PACKGET_ACK_FALSE ){
-                    switch(mAckPkg.value){
-                    case PACKGET_ACK_FALSE_ERASE_ERROR:{
-                        res = "Erase false";
-                        break;
-                    }
-                    case PACKGET_ACK_FALSE_PROGRAM_ERROR:{
-                        res = "program false";
-                        break;
-                    }
-                    case PACKGET_ACK_FALSE_SEQ_FALSE:{
-                        res = "seq false";
-                        break;
-                    }
-                    defalut:{
-                        stringstream ss;
-                        ss << "unknow ack=" << mAckPkg.type << "," <<mAckPkg.value ;
-                        res = ss.str();
-                        break;
-                    }
-                    }
-
-                    iapEvent(EVENT_TYPE_FALSE, res);
-
-                }else if ( mAckPkg.type == PACKGET_ACK_OK ){
-                    //res = "Unknow Ack receive";
-                    //maybe is the start packget ack
-                    stringstream ss;
-                    ss << "unknow ack=" << mAckPkg.type << "," <<mAckPkg.value ;
-                    res = ss.str();
-                    iapEvent(EVENT_TYPE_STATUS, res);
-                }
-
+                stringstream ss;
+                ss << "iap : STEP_DATA unknow ack" ;
+                iapEvent(EVENT_TYPE_STATUS, ss.str()  );
             }
+            break;
         }
-        mAckPkg.valid =false;
-        if( mTimeOutMs >= 3000 ){
-            //3s timeout , lost connect
-            iapStop();
-            iapEvent(EVENT_TYPE_FALSE, "Timeout");
-        }
-    }
-
-    if( mStep == STEP_JUMP ){
-        if( mAckPkg.valid ){
-            if( mAckPkg.type == PACKGET_ACK_OK && mAckPkg.value == PACKGET_END_ID ){
-                //this is a ack for start packget
+        case STEP_JUMP:{
+            if( PACKGET_END_ID == ack.value ){
                 setStep( STEP_IDEL );
                 iapEvent(EVENT_TYPE_FINISH, "");
-                mTimeOutMs = 0;
-                mAckPkg.valid = false;
-                //return;
+                iapStop();
+            }else{
+                stringstream ss;
+                ss << "iap : STEP_JUMP unknow ack" ;
+                iapEvent(EVENT_TYPE_STATUS, ss.str()  );
             }
+            break;
         }
-#if 0
-        if( mTimeOutMs >= 200 ){
-            sendJumpPackget();
-            mTimeOutMs = 0;
+
+        default:{
+            stringstream ss;
+            ss << "iap : error unknow STEP_JUMP " ;
+            iapEvent(EVENT_TYPE_FALSE, ss.str()  );
+            iapStop();
+            break;
         }
-#else
-        if( mTimeOutMs >= 1000 ){
-            //1s timeout , lost connect
+        }
+
+        return;
+    }
+}
+
+
+void IapMaster::iapTick(int intervalMs)
+{
+    if( ! isIapStarted() )
+        return;
+
+    mTimeOutMs -= intervalMs;
+
+    if( mTimeOutMs <= 0 ){
+        if( mStep == STEP_START){
+            sendStartPackget();
+            mTimeOutMs = 200;
+        }else{
             iapStop();
             iapEvent(EVENT_TYPE_FALSE, "Timeout");
-            mTimeOutMs = 0;
         }
-#endif
     }
 }
 
@@ -322,12 +326,18 @@ void IapMaster::sendStartPackget()
     sendPackget(buffer,2);
 }
 
-void IapMaster::sendDataPackget(unsigned char *data, int len)
+void IapMaster::sendDataPackget()
 {
+    size_t len  = 100;
+    len =  len <= (mFirmwareSize - mCurrentSize) ? len:(mFirmwareSize - mCurrentSize);
+    if( len <= 0 )
+        return;
+
     Chunk chunk;
     chunk.append(PACKGET_DATA_ID);
     chunk.append( ((++mCurrentDataSeq)%PACKGET_MAX_DATA_SEQ) );
-    chunk.append(data,len);
+    chunk.append(mFirmwareBuffer+mCurrentSize , len);
+    mCurrentSize += len;
 
     sendPackget( (unsigned char *) chunk.getData(), chunk.getSize());
 }

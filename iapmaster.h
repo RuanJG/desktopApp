@@ -66,7 +66,7 @@ private:
     UartCoder mDecoder;
     UartCoder mEncoder;
     unsigned char mCurrentDataSeq;
-    unsigned int mTimeOutMs;
+    int mTimeOutMs;
     IapAckPackget mAckPkg;
     std::mutex   mMutex;
 
@@ -77,9 +77,10 @@ private:
     void sendPackget(unsigned char *data, int len);
     void sendStartPackget();
     void iapReset();
-    void sendDataPackget(unsigned char *data, int len);
     void sendJumpPackget();
     void setStep(int step);
+    void sendDataPackget();
+    void iapServer(IapAckPackget &ack);
 };
 
 
