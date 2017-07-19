@@ -82,7 +82,7 @@ private:
     void handle_Serial_Data(QByteArray &bytes);
     void handle_device_message(const unsigned char *data, int len);
     void serial_send_packget(const Chunk &chunk);
-    void saveRecordToExcel(int db, QString current, int count, int error);
+    void saveRecordToExcel(int db, float current, int count, int error);
     void iapSendBytes(unsigned char *data, size_t len);
     void iapEvent(int EventType, std::string value);
     void stopIap();

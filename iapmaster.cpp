@@ -194,7 +194,8 @@ void IapMaster::iapTick(int intervalMs)
                 //return;
             }
         }
-        if( mTimeOutMs >= 100 ){
+        if( mTimeOutMs >= 500 ){
+            //make sure 500 ms is enought time for ack comeback
             sendStartPackget();
             //iapEvent(EVENT_TYPE_STATUS, "."  );
             mTimeOutMs = 0;

@@ -21,16 +21,16 @@ MainWindow::MainWindow(QWidget *parent) :
     mTimer()
 {
     ui->setupUi(this);
-    ui->currentMaxLineEdit->setText(tr("1000"));
-    ui->currentMinLineEdit->setText(tr("0"));
-    ui->VolumeMaxlineEdit->setText(tr("70"));
+    ui->currentMaxLineEdit->setText(tr("0.500"));
+    ui->currentMinLineEdit->setText(tr("0.400"));
+    ui->VolumeMaxlineEdit->setText(tr("65"));
     ui->VolumeMinlineEdit->setText(tr("0"));
     on_setcurrentButton_clicked();
     on_setVolumeButton_clicked();
 
     update_serial_info();
 
-    saveRecordToExcel(0,"0",0,USER_RES_ERROR_FLAG);
+    saveRecordToExcel(0,0,0,USER_RES_ERROR_FLAG);
 
     initIap();
 }
@@ -244,7 +244,7 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
 
 
 
-        saveRecordToExcel(db, QString::number(current), count, error );
+        saveRecordToExcel(db, current, count, error );
         ui->currentlcdNumber->display(current);
         ui->noiselcdNumber->display(db);
 
@@ -326,7 +326,7 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
 
 
 
-void MainWindow::saveRecordToExcel(int db, QString current, int count, int error)
+void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
 {
     bool newsheet = false;
 
@@ -384,8 +384,16 @@ void MainWindow::saveRecordToExcel(int db, QString current, int count, int error
         res = tr("Error: 测量无效,通信失败");
     }else{
         res = tr("False: ");
-        if( (error & USER_RES_CURRENT_FALSE_FLAG) != 0 )
-            res += tr("Current Hight 电流过大,");
+        if( (error & USER_RES_CURRENT_FALSE_FLAG) != 0 ){
+            float min = ui->currentMinLineEdit->text().toFloat();
+            float max = ui->currentMaxLineEdit->text().toFloat();
+            if( current >= max ){
+                res += tr("Current Hight 电流过大,");
+            }
+            if( current <= min ){
+                res += tr("Current Low 电流过小,");
+            }
+        }
         if( (error & USER_RES_VOICE_FALSE_FLAG) != 0 )
             res += tr("Noise Hight 噪声过大,");
 
@@ -393,7 +401,7 @@ void MainWindow::saveRecordToExcel(int db, QString current, int count, int error
 
     int col = 1;
     if( mExcel.SetCellData(mExcelCurrentRow, col++, db) \
-            && mExcel.SetCellData(mExcelCurrentRow, col++, current) \
+            && mExcel.SetCellData(mExcelCurrentRow, col++, QString::number(current) ) \
             //&& mExcel.SetCellData(mExcelCurrentRow, col++, count)
             && mExcel.SetCellData(mExcelCurrentRow, col, res))
     {
@@ -419,19 +427,19 @@ void MainWindow::saveRecordToExcel(int db, QString current, int count, int error
 
 void MainWindow::on_setcurrentButton_clicked()
 {
-    int max = ui->currentMaxLineEdit->text().toInt();
-    int min = ui->currentMinLineEdit->text().toInt();
+    float max = ui->currentMaxLineEdit->text().toFloat();
+    float min = ui->currentMinLineEdit->text().toFloat();
     if( max > min){
 
         //tag+max+min
         //send to device
+//        float Amax,Amin;
+//        Amax = (float)max/1000;
+//        Amin = (float)min/1000;
         Chunk chunk;
-        float Amax,Amin;
-        Amax = (float)max/1000;
-        Amin = (float)min/1000;
         chunk.append( USER_CMD_CURRENT_MAXMIN_TAG );
-        chunk.append( (const unsigned char *)&Amax, 4);
-        chunk.append( (const unsigned char *)&Amin, 4);
+        chunk.append( (const unsigned char *)&max, 4);
+        chunk.append( (const unsigned char *)&min, 4);
         serial_send_packget( chunk );
     }
 }
@@ -454,7 +462,7 @@ void MainWindow::on_ClearTextBrowButton_clicked()
 {
     ui->textBrowser->clear();
 
-    //saveRecordToExcel(12,"1.23",3,2);
+    //saveRecordToExcel(12,1.23,3,2);
 
 }
 
@@ -463,7 +471,7 @@ void MainWindow::on_restartButton_clicked()
     if( mExcel.IsValid())
         mExcel.Close();
 
-    saveRecordToExcel(0,"0",0,USER_RES_ERROR_FLAG);
+    saveRecordToExcel(0,0,0,USER_RES_ERROR_FLAG);
 
     ui->currentlcdNumber->display(0);
     ui->noiselcdNumber->display(0);
