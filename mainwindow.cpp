@@ -4,17 +4,21 @@
 #include "QThread"
 #include "QCloseEvent"
 #include <QDebug>
+#include <QFileDialog>
+
 
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
+    IapMaster(),
     ui(new Ui::MainWindow),
     mSerialport(NULL),
     mSerialMutex(),
     mDecoder(),
     mEncoder(),
     mExcel(),
-    mExcelCurrentRow(1)
+    mExcelCurrentRow(1),
+    mTimer()
 {
     ui->setupUi(this);
     ui->currentMaxLineEdit->setText(tr("1000"));
@@ -27,6 +31,8 @@ MainWindow::MainWindow(QWidget *parent) :
     update_serial_info();
 
     saveRecordToExcel(0,"0",0,USER_RES_ERROR_FLAG);
+
+    initIap();
 }
 
 MainWindow::~MainWindow()
@@ -44,6 +50,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
 void MainWindow::on_save_close_Button_clicked()
 {
+    stopIap();
     close_serial();
     //TODO save file
     if( mExcel.IsValid())
@@ -192,6 +199,12 @@ void MainWindow::handle_Serial_Data( QByteArray &bytes )
 {
     std::list<Chunk> packgetList;
 
+    //Iap function
+    if( this->isIapStarted() ){
+        this->iapParse( (unsigned char*) bytes.data(), bytes.count());
+        return;
+    }
+
     mDecoder.decode((unsigned char *)bytes.data(),bytes.count(), packgetList);
 
     qDebug() << "receive: " << bytes.count() << endl;
@@ -203,6 +216,7 @@ void MainWindow::handle_Serial_Data( QByteArray &bytes )
 
         handle_device_message( p,cnt );
     }
+
 
 }
 
@@ -440,7 +454,8 @@ void MainWindow::on_ClearTextBrowButton_clicked()
 {
     ui->textBrowser->clear();
 
-    saveRecordToExcel(12,"1.23",3,2);
+    //saveRecordToExcel(12,"1.23",3,2);
+
 }
 
 void MainWindow::on_restartButton_clicked()
@@ -461,4 +476,107 @@ void MainWindow::on_restartButton_clicked()
     pe.setColor(QPalette::WindowText,Qt::black);
     ui->noiselabel->setPalette(pe);
     ui->noiselabel->setText("?");
+}
+
+
+
+
+
+
+
+
+
+//Iap function
+
+
+void MainWindow::iapSendBytes(unsigned char *data, size_t len)
+{
+    mSerialMutex.lock();
+
+    if( mSerialport != NULL && mSerialport->isOpen()){
+        size_t count = mSerialport->write( (const char*) data, len );
+        if( count != len ){
+            qDebug() << "iapSendHandler: send data to serial false \n" << endl;
+        }
+    }
+    mSerialMutex.unlock();
+}
+
+
+void MainWindow::iapEvent(int EventType, std::string value)
+{
+
+    if( EventType == IapMaster::EVENT_TYPE_STARTED){
+        ui->textBrowser->append("iap started:");
+    }else if ( EventType == IapMaster::EVENT_TYPE_FINISH){
+        ui->textBrowser->append("iap finished");
+        stopIap();
+    }else if( EventType == IapMaster::EVENT_TYPE_FALSE){
+        ui->textBrowser->append("iap false: "+ QString::fromStdString(value) );
+        stopIap();
+    }else if( EventType == IapMaster::EVENT_TYPE_STATUS){
+        ui->textBrowser->append(QString::fromStdString(value));
+    }
+}
+
+
+void MainWindow::iapTickHandler(){
+
+    if( !this->isIapStarted()){
+        stopIap();
+        return;
+    }
+    this->iapTick(10);
+}
+
+
+void MainWindow::initIap()
+{
+    mTimer.stop();
+    this->iapStop();
+    connect(&mTimer,SIGNAL(timeout()),this,SLOT(iapTickHandler()));
+}
+
+bool MainWindow::startIap()
+{
+    if( ui->iapFilelineEdit->text().isEmpty()){
+        QMessageBox::warning(this,"Warnning",tr("选择IAP文件"));
+        return false;
+    }
+
+    if( ! this->iapStart(ui->iapFilelineEdit->text().toStdString()) )
+        return false;
+
+    mTimer.start(10);
+    ui->iapButton->setText("iap Stop");
+    return true;
+}
+
+void MainWindow::stopIap()
+{
+    mTimer.stop();
+    this->iapStop();
+    ui->iapButton->setText("iap Start");
+}
+
+void MainWindow::on_iapButton_clicked()
+{
+    if( this->isIapStarted() ){
+        stopIap();
+
+    }else{
+        startIap();
+    }
+}
+
+void MainWindow::on_fileChooseButton_clicked()
+{
+    QString filename = QFileDialog::getOpenFileName(this,
+        tr("Choose Iap file"),
+        "",
+        tr("*.bin"));
+
+    if( ! filename.isEmpty() ){
+        ui->iapFilelineEdit->setText(filename);
+    }
 }

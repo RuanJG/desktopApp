@@ -7,7 +7,9 @@
 #include <uartcoder.h>
 #include <chunk.h>
 #include "excelengine.h"
-
+#include <iostream>
+#include "iapmaster.h"
+#include <QTimer>
 
 // packget  head tag
 #define USER_DATA_TAG	1
@@ -31,7 +33,7 @@ namespace Ui {
 class MainWindow;
 }
 
-class MainWindow : public QMainWindow
+class MainWindow : public QMainWindow,IapMaster
 {
     Q_OBJECT
 
@@ -58,6 +60,11 @@ private slots:
 
     void on_restartButton_clicked();
 
+    void iapTickHandler();
+    void on_iapButton_clicked();
+
+    void on_fileChooseButton_clicked();
+
 private:
     Ui::MainWindow *ui;
     QSerialPort *mSerialport;
@@ -66,6 +73,7 @@ private:
     UartCoder mEncoder;
     ExcelEngine mExcel; //创建excl对象
     unsigned int mExcelCurrentRow;
+    QTimer  mTimer;
 
     void update_serial_info();
     void close_serial();
@@ -75,6 +83,11 @@ private:
     void handle_device_message(const unsigned char *data, int len);
     void serial_send_packget(const Chunk &chunk);
     void saveRecordToExcel(int db, QString current, int count, int error);
+    void iapSendBytes(unsigned char *data, size_t len);
+    void iapEvent(int EventType, std::string value);
+    void stopIap();
+    bool startIap();
+    void initIap();
 };
 
 #endif // MAINWINDOW_H

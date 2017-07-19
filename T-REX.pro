@@ -26,13 +26,15 @@ SOURCES += main.cpp\
     chunk.cpp \
     uartcoder.cpp \
     util.cpp \
-    excelengine.cpp
+    excelengine.cpp \
+    iapmaster.cpp
 
 HEADERS  += mainwindow.h \
     chunk.h \
     uartcoder.h \
     util.h \
     coder.h \
-    excelengine.h
+    excelengine.h \
+    iapmaster.h
 
 FORMS    += mainwindow.ui
