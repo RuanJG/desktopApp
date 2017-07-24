@@ -18,7 +18,9 @@ MainWindow::MainWindow(QWidget *parent) :
     mEncoder(),
     mExcel(),
     mExcelCurrentRow(1),
-    mTimer()
+    mTimer(),
+    currentPlot(),
+    noisePlot()
 {
     ui->setupUi(this);
     ui->currentMaxLineEdit->setText(tr("0.500"));
@@ -33,12 +35,23 @@ MainWindow::MainWindow(QWidget *parent) :
     saveRecordToExcel(0,0,0,USER_RES_ERROR_FLAG);
 
     initIap();
+
+
+    currentPlot.setup(ui->currentPlotwidget, \
+                      QCPRange(ui->currentMinLineEdit->text().toFloat(), ui->currentMaxLineEdit->text().toFloat()),\
+                      QCPRange(0,0.8),"Current(A)");
+
+    noisePlot.setup(ui->noisePlotwidget, \
+                      QCPRange(ui->VolumeMinlineEdit->text().toFloat(), ui->VolumeMaxlineEdit->text().toFloat()),\
+                      QCPRange(0,100),"Noise(DB)");
+
 }
 
 MainWindow::~MainWindow()
 {
     if( mExcel.IsValid() )
         mExcel.Close();
+
     delete ui;
 }
 
@@ -55,6 +68,7 @@ void MainWindow::on_save_close_Button_clicked()
     //TODO save file
     if( mExcel.IsValid())
         mExcel.Close();
+
     qApp->quit();
 }
 
@@ -207,7 +221,7 @@ void MainWindow::handle_Serial_Data( QByteArray &bytes )
 
     mDecoder.decode((unsigned char *)bytes.data(),bytes.count(), packgetList);
 
-    qDebug() << "receive: " << bytes.count() << endl;
+    //qDebug() << "receive: " << bytes.count() << endl;
 
     std::list<Chunk>::iterator iter;
     for (iter = packgetList.begin(); iter != packgetList.end(); ++iter) {
@@ -233,16 +247,19 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
         if( len != 11 )
             return;
 
-        int db, value,count,error;
+        int db,count,error;
         float current;
         memcpy((char*)&db, data+1, 4);
         memcpy( (char*)&current , data+5 , 4);
         count = data[9];
         error = data[10];
 
-        value = current*1000;
-
-
+        if( error ==0 && count == 0 ){
+            // this packget is not a result , is the test data in each record
+            currentPlot.append(current);
+            noisePlot.append((float)db);
+            return;
+        }
 
         saveRecordToExcel(db, current, count, error );
         ui->currentlcdNumber->display(current);
@@ -282,9 +299,8 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
         }
 
 
-        ui->textBrowser->append("db="+QString::number(db) +"db, current="+QString::number(value)+"mA, count=" + QString::number(count) +
+        ui->textBrowser->append("db="+QString::number(db) +"db, current="+QString::number(current)+"mA, count=" + QString::number(count) +
                                 ", error="+ QString::number(error) );
-        qDebug() << "db=" <<db <<"db, current=" <<current <<endl;
 
         break;
     }
@@ -310,6 +326,9 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
         ui->noiselabel->setPalette(pe);
         ui->noiselabel->setText("Testing...");
 
+        currentPlot.clear();
+        noisePlot.clear();
+
         break;
     }
 
@@ -333,9 +352,12 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
     if( ! mExcel.IsValid() || ! mExcel.IsOpen() ){
 
         QString filename = "T-REX-Report_"+QDateTime::currentDateTime().toString("yyyy-MM-dd_hh-mm-ss")+".xlsx";
-        filename =QDir::toNativeSeparators( QDir::currentPath()+"\/"+filename );
+        QString filedirPath = QDir::currentPath()+"/reports";
+        QDir mdir;
+        mdir.mkpath(filedirPath);
+        filename =QDir::toNativeSeparators( filedirPath+"/"+filename );
         //new file ,so alway open sheet 1
-        if( !mExcel.Open(filename,1,true) ){
+        if(! mdir.mkpath(filedirPath) || !mExcel.Open(filename,1,true) ){
             QMessageBox::warning(this,"Warning",tr("打开Excel文档失败"));
             return;
         }
@@ -441,6 +463,7 @@ void MainWindow::on_setcurrentButton_clicked()
         chunk.append( (const unsigned char *)&max, 4);
         chunk.append( (const unsigned char *)&min, 4);
         serial_send_packget( chunk );
+        currentPlot.changeRange(min,max);
     }
 }
 
@@ -455,6 +478,7 @@ void MainWindow::on_setVolumeButton_clicked()
         chunk.append( (const unsigned char *)&max, 4);
         chunk.append( (const unsigned char *)&min, 4);
         serial_send_packget( chunk );
+        noisePlot.changeRange(min,max);
     }
 }
 
@@ -463,7 +487,6 @@ void MainWindow::on_ClearTextBrowButton_clicked()
     ui->textBrowser->clear();
 
     //saveRecordToExcel(12,1.23,3,2);
-
 }
 
 void MainWindow::on_restartButton_clicked()
@@ -494,7 +517,7 @@ void MainWindow::on_restartButton_clicked()
 
 
 
-//Iap function
+//************************************************  Iap function
 
 
 void MainWindow::iapSendBytes(unsigned char *data, size_t len)
@@ -588,3 +611,14 @@ void MainWindow::on_fileChooseButton_clicked()
         ui->iapFilelineEdit->setText(filename);
     }
 }
+
+
+
+
+
+
+
+
+
+// *******************************************   Plot
+

@@ -15,7 +15,7 @@ QT      += serialport
 #use execl
  QT +=  axcontainer
 
-greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
+greaterThan(QT_MAJOR_VERSION, 4): QT += widgets printsupport
 
 TARGET = T-REX
 TEMPLATE = app
@@ -27,7 +27,8 @@ SOURCES += main.cpp\
     uartcoder.cpp \
     util.cpp \
     excelengine.cpp \
-    iapmaster.cpp
+    iapmaster.cpp \
+    qcustomplot.cpp
 
 HEADERS  += mainwindow.h \
     chunk.h \
@@ -35,6 +36,7 @@ HEADERS  += mainwindow.h \
     util.h \
     coder.h \
     excelengine.h \
-    iapmaster.h
+    iapmaster.h \
+    qcustomplot.h
 
 FORMS    += mainwindow.ui

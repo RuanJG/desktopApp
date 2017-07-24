@@ -10,6 +10,7 @@
 #include <iostream>
 #include "iapmaster.h"
 #include <QTimer>
+#include "qcustomplot.h"
 
 // packget  head tag
 #define USER_DATA_TAG	1
@@ -32,6 +33,164 @@
 namespace Ui {
 class MainWindow;
 }
+
+
+
+#include <QFont>
+class ResPlot
+{
+private:
+    QCPBars *hightBar;
+    QCPBars *middleBar;
+    QCPBars *lowBar;
+    QVector<double> hightBarData, middleBarData, lowBarData, mticks;
+    QCustomPlot *customPlot;
+    QCPRange mValidRange;
+
+public:
+    ResPlot(){
+        customPlot = NULL;
+    }
+
+    ~ResPlot(){
+
+    }
+
+    void setup(QCustomPlot *cplot, QCPRange maxminRange, QCPRange yrange, QString yLable){
+        customPlot = cplot;
+        mValidRange = maxminRange;
+        hightBar = new QCPBars(customPlot->xAxis, customPlot->yAxis);
+        middleBar = new QCPBars(customPlot->xAxis, customPlot->yAxis);
+        lowBar = new QCPBars(customPlot->xAxis, customPlot->yAxis);
+        // gives more crisp, pixel aligned bar borders
+        hightBar->setAntialiased(false);
+        middleBar->setAntialiased(false);
+        lowBar->setAntialiased(false);
+        lowBar->setStackingGap(1);
+        middleBar->setStackingGap(1);
+        hightBar->setStackingGap(1);
+        // set names and colors:
+        middleBar->setName("normal");
+        middleBar->setPen(QPen(QColor(9, 111, 176).lighter(170)));
+        middleBar->setBrush(QColor(9, 111, 176));
+        hightBar->setName("hightPart");
+        hightBar->setPen(QPen(QColor("RED").lighter(150)));
+        hightBar->setBrush(QColor("RED"));
+        lowBar->setName("lowPart");
+        lowBar->setPen(QPen(QColor(250, 170, 20).lighter(130)));
+        lowBar->setBrush(QColor(250, 170, 20));
+        // stack bars on top of each other:
+        hightBar->moveAbove(middleBar);
+        middleBar->moveAbove(lowBar);
+
+
+        // set dark background gradient:
+        QLinearGradient gradient(0, 0, 0, 400);
+        gradient.setColorAt(0, QColor(90, 90, 90));
+        gradient.setColorAt(0.38, QColor(105, 105, 105));
+        gradient.setColorAt(1, QColor(70, 70, 70));
+        customPlot->setBackground(QBrush(gradient));
+
+
+        // prepare x axis with country labels:
+        QVector<QString> labels;
+        mticks << 1 << 2 << 3 << 4 << 5 << 6 << 7 << 8 << 9 <<10 << 11;
+        labels << "1" << "2" << "3" << "4" << "5" << "6" << "7" <<"8" << "9" << "10" <<"11";
+        QSharedPointer<QCPAxisTickerText> textTicker(new QCPAxisTickerText);
+        textTicker->addTicks(mticks, labels);
+        customPlot->xAxis->setTicker(textTicker);
+        customPlot->xAxis->setTickLabelRotation(60);
+        customPlot->xAxis->setSubTicks(false);
+        customPlot->xAxis->setTickLength(0, 3);
+        customPlot->xAxis->setRange(0, 11);
+        customPlot->xAxis->setBasePen(QPen(Qt::white));
+        customPlot->xAxis->setTickPen(QPen(Qt::white));
+        customPlot->xAxis->grid()->setVisible(true);
+        customPlot->xAxis->grid()->setPen(QPen(QColor(130, 130, 130), 0, Qt::DotLine));
+        customPlot->xAxis->setTickLabelColor(Qt::white);
+        customPlot->xAxis->setLabelColor(Qt::white);
+
+        // prepare y axis:
+        customPlot->yAxis->setRange(yrange);
+        customPlot->yAxis->setPadding(5); // a bit more space to the left border
+        customPlot->yAxis->setLabel(yLable);
+        customPlot->yAxis->setBasePen(QPen(Qt::white));
+        customPlot->yAxis->setTickPen(QPen(Qt::white));
+        customPlot->yAxis->setSubTickPen(QPen(Qt::white));
+        customPlot->yAxis->grid()->setSubGridVisible(true);
+        customPlot->yAxis->setTickLabelColor(Qt::white);
+        customPlot->yAxis->setLabelColor(Qt::white);
+        customPlot->yAxis->grid()->setPen(QPen(QColor(130, 130, 130), 0, Qt::SolidLine));
+        customPlot->yAxis->grid()->setSubGridPen(QPen(QColor(130, 130, 130), 0, Qt::DotLine));
+
+        // setup legend:
+        customPlot->legend->setVisible(true);
+        customPlot->axisRect()->insetLayout()->setInsetAlignment(0, Qt::AlignTop|Qt::AlignRight);
+        customPlot->legend->setBrush(QColor(255, 255, 255, 100));
+        customPlot->legend->setBorderPen(Qt::NoPen);
+        QFont legendFont = customPlot->font();
+        legendFont.setPointSize(10);
+        customPlot->legend->setFont(legendFont);
+        customPlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom);
+
+        //draw
+        customPlot->replot();
+
+    }
+
+
+
+
+    void append( float data){
+        //qDebug() << mValidRange.lower << "," << mValidRange.upper << ":" << data << endl;
+        if( data > mValidRange.upper ){
+            middleBarData << mValidRange.upper;
+            hightBarData << data-mValidRange.upper;
+            lowBarData << 0;
+        }else if( data < mValidRange.lower ){
+            middleBarData << 0;
+            hightBarData << 0;
+            lowBarData << data;
+        }else{
+            middleBarData << data;
+            hightBarData << 0;
+            lowBarData << 0;
+        }
+
+        QVector<double> ticks;
+        for( int i=0; i< hightBarData.size(); i++){
+            ticks<< i+1;
+        }
+
+        hightBar->setData(ticks,hightBarData);
+        middleBar->setData(ticks, middleBarData);
+        lowBar->setData(ticks,lowBarData);
+
+        hightBar->moveAbove(middleBar);
+        middleBar->moveAbove(lowBar);
+
+        customPlot->replot();
+    }
+
+    void clear( ){
+        middleBarData.clear();
+        hightBarData.clear();
+        lowBarData.clear();
+        hightBar->setData(mticks,hightBarData);
+        middleBar->setData(mticks, middleBarData);
+        lowBar->setData(mticks,lowBarData);
+        customPlot->replot();
+    }
+
+    void changeRange( float min, float max){
+        mValidRange = QCPRange( min,max);
+    }
+
+
+};
+
+
+
 
 class MainWindow : public QMainWindow,IapMaster
 {
@@ -74,6 +233,8 @@ private:
     ExcelEngine mExcel; //创建excl对象
     unsigned int mExcelCurrentRow;
     QTimer  mTimer;
+    ResPlot currentPlot;
+    ResPlot noisePlot;
 
     void update_serial_info();
     void close_serial();
@@ -88,6 +249,21 @@ private:
     void stopIap();
     bool startIap();
     void initIap();
+    void setupPlotWidget(QCustomPlot *customPlot);
+    void setupBarChartDemo(QCustomPlot *customPlot);
 };
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #endif // MAINWINDOW_H
