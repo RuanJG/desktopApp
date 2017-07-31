@@ -21,11 +21,11 @@
 #define TYPE_EXECL_APP_WPS  "ET.Application"
 
 /**
-  *@brief ÕâÊÇÒ»¸ö±ãÓÚQt¶ÁÐ´excel·â×°µÄÀà£¬Í¬Ê±£¬±ãÓÚ°ÑexcelÖÐµÄÊý¾Ý
-  *ÏÔÊ¾µ½½çÃæÉÏ£¬»òÕß°Ñ½çÃæÉÏµÄÊý¾ÝÐ´ÈëexcelÖÐ£¬Í¬GUI½øÐÐ½»»¥£¬¹ØÏµÈçÏÂ£º
+  *@brief ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Qtï¿½ï¿½Ð´excelï¿½ï¿½×°ï¿½ï¿½ï¿½à£¬Í¬Ê±ï¿½ï¿½ï¿½ï¿½ï¿½Ú°ï¿½excelï¿½Ðµï¿½ï¿½ï¿½ï¿½ï¿½
+  *ï¿½ï¿½Ê¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï£ï¿½ï¿½ï¿½ï¿½ß°Ñ½ï¿½ï¿½ï¿½ï¿½Ïµï¿½ï¿½ï¿½ï¿½ï¿½Ð´ï¿½ï¿½excelï¿½Ð£ï¿½Í¬GUIï¿½ï¿½ï¿½Ð½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ïµï¿½ï¿½ï¿½Â£ï¿½
   *Qt tableWidget <--> ExcelEngine <--> xls file.
   *
-  *@note ExcelEngineÀàÖ»¸ºÔð¶Á/Ð´Êý¾Ý£¬²»¸ºÔð½âÎö£¬×öÖÐ¼ä²ã
+  *@note ExcelEngineï¿½ï¿½Ö»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½/Ð´ï¿½ï¿½ï¿½Ý£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð¼ï¿½ï¿½ï¿½
   *@author yaoboyuan 254200341@qq.com
   *@date 2012-4-12
   */
@@ -39,14 +39,14 @@ private:
     bool Open(unsigned int nSheet, bool visible, QString type);
 public:
     bool Open(QString xlsFile, unsigned int nSheet = 1, bool visible = false, QString type=TYPE_EXECL_APP_MS);
-    void Save();                //±£´æxls±¨±í
-    void Close();               //¹Ø±Õxls±¨±í
+    void Save();                //ï¿½ï¿½ï¿½ï¿½xlsï¿½ï¿½ï¿½ï¿½
+    void Close();               //ï¿½Ø±ï¿½xlsï¿½ï¿½ï¿½ï¿½
 
-    bool SaveDataFrTable(QTableWidget *tableWidget); //±£´æÊý¾Ýµ½xls
-    bool ReadDataToTable(QTableWidget *tableWidget); //´Óxls¶ÁÈ¡Êý¾Ýµ½ui
+    bool SaveDataFrTable(QTableWidget *tableWidget); //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ýµï¿½xls
+    bool ReadDataToTable(QTableWidget *tableWidget); //ï¿½ï¿½xlsï¿½ï¿½È¡ï¿½ï¿½ï¿½Ýµï¿½ui
 
-    QVariant GetCellData(unsigned int row, unsigned int column);                //»ñÈ¡Ö¸¶¨µ¥ÔªÊý¾Ý
-    bool     SetCellData(unsigned int row, unsigned int column, QVariant data); //ÐÞ¸ÄÖ¸¶¨µ¥ÔªÊý¾Ý
+    QVariant GetCellData(unsigned int row, unsigned int column);                //ï¿½ï¿½È¡Ö¸ï¿½ï¿½ï¿½ï¿½Ôªï¿½ï¿½ï¿½ï¿½
+    bool     SetCellData(unsigned int row, unsigned int column, QVariant data); //ï¿½Þ¸ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½Ôªï¿½ï¿½ï¿½ï¿½
 
     unsigned int GetUsedRagneRowCount()const;
     unsigned int GetUsedRagneColumnCount()const;
@@ -65,25 +65,26 @@ public:
     unsigned int getMaxColumnCount();
 
 
+    bool mergeUnit(int row0, QChar col0, int row1, QChar col1);
 private:
-    QString   sXlsFile;     //xlsÎÄ¼þÂ·¾¶
-    bool      bIsOpen;      //ÊÇ·ñÒÑ´ò¿ª
-    bool      bIsValid;     //ÊÇ·ñÓÐÐ§
-    bool      bIsANewFile;  //ÊÇ·ñÊÇÒ»¸öÐÂ½¨xlsÎÄ¼þ£¬ÓÃÀ´Çø·Ö´ò¿ªµÄexcelÊÇÒÑ´æÔÚÎÄ¼þ»¹ÊÇÓÐ±¾ÀàÐÂ½¨µÄ
-    bool      bIsSaveAlready;//·ÀÖ¹ÖØ¸´±£´æ
+    QString   sXlsFile;     //xlsï¿½Ä¼ï¿½Â·ï¿½ï¿½
+    bool      bIsOpen;      //ï¿½Ç·ï¿½ï¿½Ñ´ï¿½ï¿½ï¿½
+    bool      bIsValid;     //ï¿½Ç·ï¿½ï¿½ï¿½Ð§
+    bool      bIsANewFile;  //ï¿½Ç·ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½Â½ï¿½xlsï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö´ò¿ªµï¿½excelï¿½ï¿½ï¿½Ñ´ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð±ï¿½ï¿½ï¿½ï¿½Â½ï¿½ï¿½ï¿½
+    bool      bIsSaveAlready;//ï¿½ï¿½Ö¹ï¿½Ø¸ï¿½ï¿½ï¿½ï¿½ï¿½
 
-    QAxObject *pExcel;      //Ö¸ÏòÕû¸öexcelÓ¦ÓÃ³ÌÐò
-    QAxObject *pWorkbooks;  //Ö¸Ïò¹¤×÷²¾¼¯,excelÓÐºÜ¶à¹¤×÷²¾
-    QAxObject *pWorkbook;   //Ö¸ÏòsXlsFile¶ÔÓ¦µÄ¹¤×÷²¾
-    bool      bIsVisible;   //excelÊÇ·ñ¿É¼û
+    QAxObject *pExcel;      //Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½excelÓ¦ï¿½Ã³ï¿½ï¿½ï¿½
+    QAxObject *pWorkbooks;  //Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½,excelï¿½ÐºÜ¶à¹¤ï¿½ï¿½ï¿½ï¿½
+    QAxObject *pWorkbook;   //Ö¸ï¿½ï¿½sXlsFileï¿½ï¿½Ó¦ï¿½Ä¹ï¿½ï¿½ï¿½ï¿½ï¿½
+    bool      bIsVisible;   //excelï¿½Ç·ï¿½ï¿½É¼ï¿½
 
-    QAxObject *pWorksheet;  //Ö¸Ïò¹¤×÷²¾ÖÐµÄÄ³¸ösheet±íµ¥
-    unsigned int      mCurrentSheetId;   //µ±Ç°´ò¿ªµÄµÚ¼¸¸ösheet
+    QAxObject *pWorksheet;  //Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ðµï¿½Ä³ï¿½ï¿½sheetï¿½ï¿½ï¿½ï¿½
+    unsigned int      mCurrentSheetId;   //ï¿½ï¿½Ç°ï¿½ò¿ªµÄµÚ¼ï¿½ï¿½ï¿½sheet
     unsigned int       mWorkSheetCount;
-    unsigned int       mUsedRagneRowCount;    //ÐÐÊý
-    unsigned int       mUsedRagneColumnCount; //ÁÐÊý
-    unsigned int       mUsedRagneStartRow;    //¿ªÊ¼ÓÐÊý¾ÝµÄÐÐÏÂ±êÖµ
-    unsigned int       mUsedRagneStartColumn; //¿ªÊ¼ÓÐÊý¾ÝµÄÁÐÏÂ±êÖµ
+    unsigned int       mUsedRagneRowCount;    //ï¿½ï¿½ï¿½ï¿½
+    unsigned int       mUsedRagneColumnCount; //ï¿½ï¿½ï¿½ï¿½
+    unsigned int       mUsedRagneStartRow;    //ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½Ýµï¿½ï¿½ï¿½ï¿½Â±ï¿½Öµ
+    unsigned int       mUsedRagneStartColumn; //ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½Ýµï¿½ï¿½ï¿½ï¿½Â±ï¿½Öµ
     unsigned int       mMaxRowCount;
     unsigned int       mMaxColumnCount;
 
@@ -92,38 +93,38 @@ private:
 
 
 /*
-    ExcelEngine excel; //´´½¨excl¶ÔÏó
-    excel.Open(QObject::tr("c:\\Test.xls"),1,false); //´ò¿ªÖ¸¶¨µÄxlsÎÄ¼þµÄÖ¸¶¨sheet£¬ÇÒÖ¸¶¨ÊÇ·ñ¿É¼û
+    ExcelEngine excel; //ï¿½ï¿½ï¿½ï¿½exclï¿½ï¿½ï¿½ï¿½
+    excel.Open(QObject::tr("c:\\Test.xls"),1,false); //ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½xlsï¿½Ä¼ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½sheetï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½Ç·ï¿½ï¿½É¼ï¿½
 
     int num = 0;
     for (int i=1; i<=10; i++)
     {
         for (int j=1; j<=10; j++)
         {
-           excel.SetCellData(i,j,++num); //ÐÞ¸ÄÖ¸¶¨µ¥ÔªÊý¾Ý
+           excel.SetCellData(i,j,++num); //ï¿½Þ¸ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½Ôªï¿½ï¿½ï¿½ï¿½
         }
     }
 
-    QVarient data = excel.GetCellData(1,1); //·ÃÎÊÖ¸¶¨µ¥Ôª¸ñÊý¾Ý
+    QVarient data = excel.GetCellData(1,1); //ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½Ôªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     excel.GetCellData(2,2);
     excel.GetCellData(3,3);
-    excel.Save(); //±£´æ
+    excel.Save(); //ï¿½ï¿½ï¿½ï¿½
     excel.Close();
 */
 
-//µ¼ÈëÊý¾Ýµ½tablewidgetÖÐ
+//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ýµï¿½tablewidgetï¿½ï¿½
 /*
     ExcelEngine excel(QObject::tr("c:\\Import.xls"));
     excel.Open();
-    excel.ReadDataToTable(ui->tableWidget); //µ¼Èëµ½widgetÖÐ
+    excel.ReadDataToTable(ui->tableWidget); //ï¿½ï¿½ï¿½ëµ½widgetï¿½ï¿½
     excel.Close();
 */
 
-//°ÑtablewidgetÖÐµÄÊý¾Ýµ¼³öµ½excelÖÐ
+//ï¿½ï¿½tablewidgetï¿½Ðµï¿½ï¿½ï¿½ï¿½Ýµï¿½ï¿½ï¿½ï¿½ï¿½excelï¿½ï¿½
 /*
     ExcelEngine excel(QObject::tr("c:\\Export.xls"));
     excel.Open();
-    excel.SaveDataFrTable(ui->tableWidget); //µ¼³ö±¨±í
+    excel.SaveDataFrTable(ui->tableWidget); //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     excel.Close();
 */
 
@@ -132,14 +133,14 @@ private:
 /*
  *
  *
- * Ãû³Æ                                    Öµ ÃèÊö
-xlAddIn                                 18 Microsoft Office Excel ¼ÓÔØÏî
-xlAddIn8                                18 Excel 2007 ¼ÓÔØÏî
+ * ï¿½ï¿½ï¿½ï¿½                                    Öµ ï¿½ï¿½ï¿½ï¿½
+xlAddIn                                 18 Microsoft Office Excel ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+xlAddIn8                                18 Excel 2007 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 xlCSV                                    6 CSV
 xlCSVMac                                22 Macintosh CSV
 xlCSVMSDOS                              24 MSDOS CSV
 xlCSVWindows                            23 Windows CSV
-xlCurrentPlatformText                -4158 µ±Ç°Æ½Ì¨ÎÄ±¾
+xlCurrentPlatformText                -4158 ï¿½ï¿½Ç°Æ½Ì¨ï¿½Ä±ï¿½
 xlDBF2                                   7 DBF2
 xlDBF3                                   8 DBF3
 xlDBF4                                  11 DBF4
@@ -149,28 +150,28 @@ xlExcel2                                16 Excel 2
 xlExcel2FarEast                         27 Excel2 FarEast
 xlExcel3                                29 Excel3
 xlExcel4                                33 Excel4
-xlExcel4Workbook                        35 Excel4 ¹¤×÷²¾
+xlExcel4Workbook                        35 Excel4 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 xlExcel5                                39 Excel5
 xlExcel7                                39 Excel7
 xlExcel8                                56 Excel8
 xlExcel9795                             43 Excel9795
-xlHtml                                  44 HTML ¸ñÊ½
-xlIntlAddIn                             26 ¹ú¼Ê¼ÓÔØÏî
-xlIntlMacro                             25 ¹ú¼Êºê
-xlOpenXMLAddIn                          55 ´ò¿ª XML ¼ÓÔØÏî
-xlOpenXMLTemplate                       54 ´ò¿ª XML Ä£°å
-xlOpenXMLTemplateMacroEnabled           53 ´ò¿ªÆôÓÃµÄ XML Ä£°åºê
-xlOpenXMLWorkbook                       51 ´ò¿ª XML ¹¤×÷²¾
-xlOpenXMLWorkbookMacroEnabled           52 ´ò¿ªÆôÓÃµÄ XML ¹¤×÷²¾ºê
+xlHtml                                  44 HTML ï¿½ï¿½Ê½
+xlIntlAddIn                             26 ï¿½ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½
+xlIntlMacro                             25 ï¿½ï¿½ï¿½Êºï¿½
+xlOpenXMLAddIn                          55 ï¿½ï¿½ï¿½ï¿½ XML ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+xlOpenXMLTemplate                       54 ï¿½ï¿½ï¿½ï¿½ XML Ä£ï¿½ï¿½
+xlOpenXMLTemplateMacroEnabled           53 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ãµï¿½ XML Ä£ï¿½ï¿½ï¿½ï¿½
+xlOpenXMLWorkbook                       51 ï¿½ï¿½ï¿½ï¿½ XML ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+xlOpenXMLWorkbookMacroEnabled           52 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ãµï¿½ XML ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 xlSYLK                                   2 SYLK
-xlTemplate                              17 Ä£°å
-xlTemplate8                             17 Ä£°å 8
-xlTextMac                               19 Macintosh ÎÄ±¾
-xlTextMSDOS                             21 MSDOS ÎÄ±¾
-xlTextPrinter                           36 ´òÓ¡»úÎÄ±¾
-xlTextWindows                           20 Windows ÎÄ±¾
-xlUnicodeText                           42 Unicode ÎÄ±¾
-xlWebArchive                            45 Web µµ°¸
+xlTemplate                              17 Ä£ï¿½ï¿½
+xlTemplate8                             17 Ä£ï¿½ï¿½ 8
+xlTextMac                               19 Macintosh ï¿½Ä±ï¿½
+xlTextMSDOS                             21 MSDOS ï¿½Ä±ï¿½
+xlTextPrinter                           36 ï¿½ï¿½Ó¡ï¿½ï¿½ï¿½Ä±ï¿½
+xlTextWindows                           20 Windows ï¿½Ä±ï¿½
+xlUnicodeText                           42 Unicode ï¿½Ä±ï¿½
+xlWebArchive                            45 Web ï¿½ï¿½ï¿½ï¿½
 xlWJ2WD1                                14 WJ2WD1
 xlWJ3                                   40 WJ3
 xlWJ3FJ3                                41 WJ3FJ3
@@ -180,12 +181,12 @@ xlWK1FMT                                30 WK1FMT
 xlWK3                                   15 WK3
 xlWK3FM3                                32 WK3FM3
 xlWK4                                   38 WK4
-xlWKS                                    4 ¹¤×÷±í
-xlWorkbookDefault                       51 Ä¬ÈÏ¹¤×÷²¾
-xlWorkbookNormal                     -4143 ³£¹æ¹¤×÷²¾
+xlWKS                                    4 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+xlWorkbookDefault                       51 Ä¬ï¿½Ï¹ï¿½ï¿½ï¿½ï¿½ï¿½
+xlWorkbookNormal                     -4143 ï¿½ï¿½ï¿½æ¹¤ï¿½ï¿½ï¿½ï¿½
 xlWorks2FarEast                         28 Works2 FarEast
 xlWQ1                                   34 WQ1
-xlXMLSpreadsheet                        46 XML µç×Ó±í¸ñ
+xlXMLSpreadsheet                        46 XML ï¿½ï¿½ï¿½Ó±ï¿½ï¿½ï¿½
  *
  * */
 

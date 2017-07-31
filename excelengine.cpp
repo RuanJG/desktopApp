@@ -425,6 +425,28 @@ bool ExcelEngine::openWorkSheet( unsigned int id )
 }
 
 
+//QChar(3 - 1 + 'A')); ?//初始列
+bool ExcelEngine::mergeUnit(int row0,QChar col0, int row1, QChar col1)
+{
+    if( !IsOpen() ){
+        return false;
+    }
+    QString merge_cell;
+    merge_cell.append(col0);//初始列
+    merge_cell.append(QString::number(row0));//初始行
+    merge_cell.append(":");
+    merge_cell.append(col1);//终止列
+    merge_cell.append(QString::number(row1));//终止行
+    QAxObject *merge_range = pWorksheet->querySubObject("Range(const QString&)", merge_cell);
+    merge_range->setProperty("HorizontalAlignment", -4108);
+    merge_range->setProperty("VerticalAlignment", -4108);
+    merge_range->setProperty("WrapText", true);
+    merge_range->setProperty("MergeCells", true); //合并单元格
+    //merge_range->setProperty("MergeCells", false); ?//拆分单元格
+
+    return true;
+}
+
 
 /**
   *@brief 判断excel是否已被打开

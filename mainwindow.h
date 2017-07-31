@@ -224,6 +224,10 @@ private slots:
 
     void on_fileChooseButton_clicked();
 
+    void on_checkBox_clicked();
+
+    void on_testCountcomboBox_currentIndexChanged(const QString &arg1);
+
 private:
     Ui::MainWindow *ui;
     QSerialPort *mSerialport;
@@ -235,6 +239,8 @@ private:
     QTimer  mTimer;
     ResPlot currentPlot;
     ResPlot noisePlot;
+    int mExcelTestIndex;
+    int mExcelTestCount;
 
     void update_serial_info();
     void close_serial();
@@ -251,6 +257,7 @@ private:
     void initIap();
     void setupPlotWidget(QCustomPlot *customPlot);
     void setupBarChartDemo(QCustomPlot *customPlot);
+    void displayResult(int db, float current, int error);
 };
 
 

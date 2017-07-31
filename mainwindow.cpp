@@ -20,7 +20,9 @@ MainWindow::MainWindow(QWidget *parent) :
     mExcelCurrentRow(1),
     mTimer(),
     currentPlot(),
-    noisePlot()
+    noisePlot(),
+    mExcelTestIndex(0),
+    mExcelTestCount(0)
 {
     ui->setupUi(this);
     ui->currentMaxLineEdit->setText(tr("0.500"));
@@ -31,6 +33,8 @@ MainWindow::MainWindow(QWidget *parent) :
     on_setVolumeButton_clicked();
 
     update_serial_info();
+
+    on_checkBox_clicked();
 
     saveRecordToExcel(0,0,0,USER_RES_ERROR_FLAG);
 
@@ -45,6 +49,11 @@ MainWindow::MainWindow(QWidget *parent) :
                       QCPRange(ui->VolumeMinlineEdit->text().toFloat(), ui->VolumeMaxlineEdit->text().toFloat()),\
                       QCPRange(0,100),"Noise(DB)");
 
+
+    for( int i=1; i< 10; i++ ){
+        ui->testCountcomboBox->addItem( QString::number(i) );
+    }
+    ui->testCountcomboBox->setCurrentIndex(1);
 }
 
 MainWindow::~MainWindow()
@@ -82,6 +91,8 @@ void MainWindow::update_serial_info()
             ui->SerialcomboBox->addItem(serialPortInfo.portName());
         }
 
+        if( serialPortInfo.description() == "Prolific USB-to-Serial Comm Port")
+            ui->SerialcomboBox->setCurrentIndex( ui->SerialcomboBox->count()-1);
 
        qDebug() << endl
             << QObject::tr("Port: ") << serialPortInfo.portName() << endl
@@ -262,41 +273,7 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
         }
 
         saveRecordToExcel(db, current, count, error );
-        ui->currentlcdNumber->display(current);
-        ui->noiselcdNumber->display(db);
-
-        QPalette pe;
-        QString passstr = tr("Pass 合格");
-        QString falsestr = tr("False 不良");
-        QString errorstr = tr("Test Error");
-        if( error & USER_RES_ERROR_FLAG ){
-            pe.setColor(QPalette::WindowText,Qt::red);
-            ui->currentlabel->setPalette(pe);
-            ui->currentlabel->setText(errorstr);
-            ui->noiselabel->setPalette(pe);
-            ui->noiselabel->setText(errorstr);
-        }else{
-            if( (error & USER_RES_CURRENT_FALSE_FLAG) != 0 ){
-                pe.setColor(QPalette::WindowText,Qt::red);
-                ui->currentlabel->setPalette(pe);
-                ui->currentlabel->setText(falsestr);
-            }else{
-                pe.setColor(QPalette::WindowText,Qt::green);
-                ui->currentlabel->setPalette(pe);
-                ui->currentlabel->setText(passstr);
-            }
-
-            if( (error & USER_RES_VOICE_FALSE_FLAG) != 0 ){
-                pe.setColor(QPalette::WindowText,Qt::red);
-                ui->noiselabel->setPalette(pe);
-                ui->noiselabel->setText(falsestr);
-            }else{
-                pe.setColor(QPalette::WindowText,Qt::green);
-                ui->noiselabel->setPalette(pe);
-                ui->noiselabel->setText(passstr);
-            }
-
-        }
+        displayResult(db, current , error);
 
 
         ui->textBrowser->append("db="+QString::number(db) +"db, current="+QString::number(current)+"mA, count=" + QString::number(count) +
@@ -341,6 +318,45 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
 }
 
 
+void MainWindow::displayResult( int db, float current, int error )
+{
+    ui->currentlcdNumber->display(current);
+    ui->noiselcdNumber->display(db);
+
+    QPalette pe;
+    QString passstr = tr("Pass 合格");
+    QString falsestr = tr("False 不良");
+    QString errorstr = tr("Test Error");
+    if( error & USER_RES_ERROR_FLAG ){
+        pe.setColor(QPalette::WindowText,Qt::red);
+        ui->currentlabel->setPalette(pe);
+        ui->currentlabel->setText(errorstr);
+        ui->noiselabel->setPalette(pe);
+        ui->noiselabel->setText(errorstr);
+    }else{
+        if( (error & USER_RES_CURRENT_FALSE_FLAG) != 0 ){
+            pe.setColor(QPalette::WindowText,Qt::red);
+            ui->currentlabel->setPalette(pe);
+            ui->currentlabel->setText(falsestr);
+        }else{
+            pe.setColor(QPalette::WindowText,Qt::green);
+            ui->currentlabel->setPalette(pe);
+            ui->currentlabel->setText(passstr);
+        }
+
+        if( (error & USER_RES_VOICE_FALSE_FLAG) != 0 ){
+            pe.setColor(QPalette::WindowText,Qt::red);
+            ui->noiselabel->setPalette(pe);
+            ui->noiselabel->setText(falsestr);
+        }else{
+            pe.setColor(QPalette::WindowText,Qt::green);
+            ui->noiselabel->setPalette(pe);
+            ui->noiselabel->setText(passstr);
+        }
+
+    }
+}
+
 
 
 
@@ -363,6 +379,8 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
         }
         newsheet = true;
         mExcelCurrentRow = 1;
+        mExcelTestIndex = 1;
+        mExcelTestCount = 0;
     }
 
     if( mExcelCurrentRow >= mExcel.getMaxRowCount() ){
@@ -381,7 +399,10 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
     if( newsheet ){
         mExcelCurrentRow = 1 ; //mExcel.getStartRow();
         int col = 1;
-        if( mExcel.SetCellData(mExcelCurrentRow, col++, "Noise(DB)") \
+        if( mExcel.SetCellData(mExcelCurrentRow, col++, "Index") \
+                && mExcel.SetCellData(mExcelCurrentRow, col++, "Shell") \
+                && mExcel.SetCellData(mExcelCurrentRow, col++, "Color") \
+                && mExcel.SetCellData(mExcelCurrentRow, col++, "Noise(DB)") \
                 && mExcel.SetCellData(mExcelCurrentRow, col++, "Current(A)") \
                 //&& mExcel.SetCellData(mExcelCurrentRow, col++, "测量次数")
                 && mExcel.SetCellData(mExcelCurrentRow, col, "Result"))
@@ -422,7 +443,22 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
     }
 
     int col = 1;
-    if( mExcel.SetCellData(mExcelCurrentRow, col++, db) \
+    if( mExcelTestCount == 0 ){
+        mExcel.SetCellData(mExcelCurrentRow, col++, mExcelTestIndex );
+        mExcel.SetCellData(mExcelCurrentRow, col++, ui->withSheelCheckBox->isChecked()? "Yes":"No" );
+    }else{
+        col++;
+        mExcel.SetCellData(mExcelCurrentRow, col++, ui->withSheelCheckBox->isChecked()? "No":"Yes" );
+    }
+
+    if( ui->checkBox->isChecked()){
+        mExcel.SetCellData(mExcelCurrentRow, col++, ui->colorBlackradioButton->isChecked()?"Black":"White" );
+    }else{
+        mExcel.SetCellData(mExcelCurrentRow, col++, "-" );
+    }
+
+
+    if(  mExcel.SetCellData(mExcelCurrentRow, col++, db) \
             && mExcel.SetCellData(mExcelCurrentRow, col++, QString::number(current) ) \
             //&& mExcel.SetCellData(mExcelCurrentRow, col++, count)
             && mExcel.SetCellData(mExcelCurrentRow, col, res))
@@ -433,6 +469,16 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
             mExcel.setCellBackgroundColor(mExcelCurrentRow,col,QColor(255,0,0));
         }
         mExcelCurrentRow ++;
+
+        if( mExcelTestCount >= (ui->testCountcomboBox->currentIndex()) ){
+            if( mExcelTestCount >= 1 )
+                mExcel.mergeUnit(mExcelCurrentRow-mExcelTestCount-1,QChar('A'), mExcelCurrentRow-1,QChar('A'));
+            mExcelTestCount = 0;
+            mExcelTestIndex++;
+        }else{
+            mExcelTestCount++;
+        }
+
     }else{
         QMessageBox::warning(this,"Warning",tr("保存数据失败"));
     }
@@ -486,7 +532,10 @@ void MainWindow::on_ClearTextBrowButton_clicked()
 {
     ui->textBrowser->clear();
 
-    //saveRecordToExcel(12,1.23,3,2);
+//    saveRecordToExcel(60,0.71,9,1);
+//    displayResult(60,0.55,0);
+//    currentPlot.append(0.3+(float)(rand()%3)/10 );
+//    noisePlot.append( 55.0+ (float)(rand()%30));
 }
 
 void MainWindow::on_restartButton_clicked()
@@ -619,6 +668,21 @@ void MainWindow::on_fileChooseButton_clicked()
 
 
 
+//################################# color setting
 
-// *******************************************   Plot
 
+void MainWindow::on_checkBox_clicked()
+{
+    if( ui->checkBox->isChecked() ){
+        ui->colorWhiteradioButton->setEnabled(true);
+        ui->colorBlackradioButton->setEnabled(true);
+    }else{
+        ui->colorBlackradioButton->setEnabled(false);
+        ui->colorWhiteradioButton->setEnabled(false);
+    }
+}
+
+void MainWindow::on_testCountcomboBox_currentIndexChanged(const QString &arg1)
+{
+
+}
