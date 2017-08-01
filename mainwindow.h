@@ -245,6 +245,9 @@ private:
     int mExcelTestCount;
 
     QTimer  mtestTimer;
+    unsigned int mNoiseFalseCount;
+    unsigned int mCurrentFalseCount;
+    unsigned int mFalseCount;
 
     void update_serial_info();
     void close_serial();

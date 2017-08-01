@@ -292,7 +292,10 @@
                 <item>
                  <widget class="QCheckBox" name="withSheelCheckBox">
                   <property name="text">
-                   <string>先带壳测</string>
+                   <string>带壳测</string>
+                  </property>
+                  <property name="checked">
+                   <bool>true</bool>
                   </property>
                  </widget>
                 </item>

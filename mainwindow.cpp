@@ -23,13 +23,16 @@ MainWindow::MainWindow(QWidget *parent) :
     noisePlot(),
     mExcelTestIndex(0),
     mExcelTestCount(0),
-    mtestTimer()
+    mtestTimer(),
+    mNoiseFalseCount(0),
+    mCurrentFalseCount(0),
+    mFalseCount(0)
 {
     ui->setupUi(this);
     ui->currentMaxLineEdit->setText(tr("0.500"));
     ui->currentMinLineEdit->setText(tr("0.400"));
     ui->VolumeMaxlineEdit->setText(tr("65"));
-    ui->VolumeMinlineEdit->setText(tr("0"));
+    ui->VolumeMinlineEdit->setText(tr("20"));
     on_setcurrentButton_clicked();
     on_setVolumeButton_clicked();
 
@@ -366,6 +369,8 @@ void MainWindow::displayResult( int db, float current, int error )
 void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
 {
     bool newsheet = false;
+    int noiseFalse=0;
+    int currentFalse = 0;
 
     if( ! mExcel.IsValid() || ! mExcel.IsOpen() ){
 
@@ -383,6 +388,9 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
         mExcelCurrentRow = 1;
         mExcelTestIndex = 1;
         mExcelTestCount = 0;
+        mNoiseFalseCount =0;
+        mCurrentFalseCount =0;
+        mFalseCount =0 ;
     }
 
     if( mExcelCurrentRow >= mExcel.getMaxRowCount() ){
@@ -407,8 +415,14 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
                 && mExcel.SetCellData(mExcelCurrentRow, col++, "Noise(DB)") \
                 && mExcel.SetCellData(mExcelCurrentRow, col++, "Current(A)") \
                 //&& mExcel.SetCellData(mExcelCurrentRow, col++, "测量次数")
-                && mExcel.SetCellData(mExcelCurrentRow, col, "Result"))
+                && mExcel.SetCellData(mExcelCurrentRow, col++, "Result"))
         {
+            //set 统计结果
+            col++;
+            mExcel.SetCellData(mExcelCurrentRow, col++, "Total Count");
+            mExcel.SetCellData(mExcelCurrentRow, col++, "False Count");
+            mExcel.SetCellData(mExcelCurrentRow, col++, "Noise False Count");
+            mExcel.SetCellData(mExcelCurrentRow, col++, "Current False Count");
             mExcelCurrentRow++;
         }else{
             QMessageBox::warning(this,"Warning",tr("Excel文档写入标题失败"));
@@ -422,9 +436,9 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
         return;
 
     //插入到excel表
-    QString res = "unknow 未知";
+    QString res = "unknow";
     if( error == 0 ){
-        res = tr("Pass 合格");
+        res = tr("Pass");
     }else if( error & USER_RES_ERROR_FLAG ){
         res = tr("Error: 测量无效,通信失败");
     }else{
@@ -433,14 +447,17 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
             float min = ui->currentMinLineEdit->text().toFloat();
             float max = ui->currentMaxLineEdit->text().toFloat();
             if( current >= max ){
-                res += tr("Current Hight 电流过大,");
+                res += tr("Current Hight,");
             }
             if( current <= min ){
-                res += tr("Current Low 电流过小,");
+                res += tr("Current Low,");
             }
+            currentFalse = 1;
         }
-        if( (error & USER_RES_VOICE_FALSE_FLAG) != 0 )
-            res += tr("Noise Hight 噪声过大,");
+        if( (error & USER_RES_VOICE_FALSE_FLAG) != 0 ){
+            res += tr("Noise Hight");
+            noiseFalse = 1;
+        }
 
     }
 
@@ -463,24 +480,39 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
     if(  mExcel.SetCellData(mExcelCurrentRow, col++, db) \
             && mExcel.SetCellData(mExcelCurrentRow, col++, QString::number(current) ) \
             //&& mExcel.SetCellData(mExcelCurrentRow, col++, count)
-            && mExcel.SetCellData(mExcelCurrentRow, col, res))
+            && mExcel.SetCellData(mExcelCurrentRow, col++, res))
     {
         if( error == 0){
             mExcel.setCellBackgroundColor(mExcelCurrentRow,col,QColor(0,255,0));
         }else{
             mExcel.setCellBackgroundColor(mExcelCurrentRow,col,QColor(255,0,0));
         }
-        mExcelCurrentRow ++;
 
         if( mExcelTestCount >= (ui->testCountcomboBox->currentIndex()) ){
             if( mExcelTestCount >= 1 )
                 mExcel.mergeUnit(mExcelCurrentRow-mExcelTestCount-1,QChar('A'), mExcelCurrentRow-1,QChar('A'));
             mExcelTestCount = 0;
+
+            mNoiseFalseCount += noiseFalse;
+            mCurrentFalseCount += currentFalse;
+            mFalseCount += (noiseFalse+currentFalse > 0) ? 1:0 ;
+            mExcel.SetCellData(2, col+1, QString::number(mExcelTestIndex) );
+            mExcel.SetCellData(2, col+2, QString::number(mFalseCount) );
+            mExcel.SetCellData(2, col+3, QString::number(mNoiseFalseCount) );
+            mExcel.SetCellData(2, col+4, QString::number(mCurrentFalseCount) );
+
+            mExcel.SetCellData(3, col+2, QString::number(mFalseCount*100/mExcelTestIndex)+"%" );
+            mExcel.SetCellData(3, col+3, QString::number(mNoiseFalseCount*100/mExcelTestIndex)+"%"  );
+            mExcel.SetCellData(3, col+4, QString::number(mCurrentFalseCount*100/mExcelTestIndex)+"%"  );
+
             mExcelTestIndex++;
+
         }else{
             mExcelTestCount++;
         }
 
+
+        mExcelCurrentRow ++;
         mExcel.Save();
 
     }else{
