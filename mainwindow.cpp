@@ -54,7 +54,7 @@ MainWindow::MainWindow(QWidget *parent) :
     for( int i=1; i< 10; i++ ){
         ui->testCountcomboBox->addItem( QString::number(i) );
     }
-    ui->testCountcomboBox->setCurrentIndex(1);
+    ui->testCountcomboBox->setCurrentIndex(0);
 
 }
 
@@ -480,6 +480,8 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
         }else{
             mExcelTestCount++;
         }
+
+        mExcel.Save();
 
     }else{
         QMessageBox::warning(this,"Warning",tr("保存数据失败"));
