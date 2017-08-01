@@ -228,6 +228,8 @@ private slots:
 
     void on_testCountcomboBox_currentIndexChanged(const QString &arg1);
 
+    void victorEvent();
+
 private:
     Ui::MainWindow *ui;
     QSerialPort *mSerialport;
@@ -241,6 +243,8 @@ private:
     ResPlot noisePlot;
     int mExcelTestIndex;
     int mExcelTestCount;
+
+    QTimer  mtestTimer;
 
     void update_serial_info();
     void close_serial();
@@ -258,6 +262,9 @@ private:
     void setupPlotWidget(QCustomPlot *customPlot);
     void setupBarChartDemo(QCustomPlot *customPlot);
     void displayResult(int db, float current, int error);
+    bool sendVictorCmd(char *cmd, int timeoutMs = 0, char *res = __null, int len = 0);
+
+    void startTestVictor();
 };
 
 

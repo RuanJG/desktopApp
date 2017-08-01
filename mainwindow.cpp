@@ -22,7 +22,8 @@ MainWindow::MainWindow(QWidget *parent) :
     currentPlot(),
     noisePlot(),
     mExcelTestIndex(0),
-    mExcelTestCount(0)
+    mExcelTestCount(0),
+    mtestTimer()
 {
     ui->setupUi(this);
     ui->currentMaxLineEdit->setText(tr("0.500"));
@@ -54,6 +55,7 @@ MainWindow::MainWindow(QWidget *parent) :
         ui->testCountcomboBox->addItem( QString::number(i) );
     }
     ui->testCountcomboBox->setCurrentIndex(1);
+
 }
 
 MainWindow::~MainWindow()
@@ -536,6 +538,8 @@ void MainWindow::on_ClearTextBrowButton_clicked()
 //    displayResult(60,0.55,0);
 //    currentPlot.append(0.3+(float)(rand()%3)/10 );
 //    noisePlot.append( 55.0+ (float)(rand()%30));
+
+//    startTestVictor();
 }
 
 void MainWindow::on_restartButton_clicked()
@@ -685,4 +689,81 @@ void MainWindow::on_checkBox_clicked()
 void MainWindow::on_testCountcomboBox_currentIndexChanged(const QString &arg1)
 {
 
+}
+
+
+
+
+
+bool MainWindow::sendVictorCmd( char* cmd, int timeoutMs, char * res , int len)
+{
+    int index = 0,count;
+
+
+    mSerialport->write(cmd, strlen(cmd));
+
+    if( timeoutMs == 0 || res == NULL || len == 0)
+        return true;
+
+    memset(res,0,len);
+
+    while( mSerialport->waitForReadyRead( timeoutMs) ){
+        count = mSerialport->read(res+index,len-index);
+        if( count <= 0 ){
+            return false;
+        }
+        index += count;
+        if( res[index-1] == '\n' || index >= len){
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void MainWindow::victorEvent()
+{
+    char data[32];
+
+    if( sendVictorCmd("FUNC1?\n",300,data,32) ){
+        if( 0 != strcmp(data,"ADC\n") ){
+            ui->textBrowser->append("func init!");
+            sendVictorCmd("ADC\n",300,data,32);
+
+            sendVictorCmd("RATE M\n",300,data,32);
+
+            sendVictorCmd("RANGE 5\n",300,data,32);
+            return;
+        }
+    }else{
+        ui->textBrowser->append("func timeout!");
+    }
+
+    if( sendVictorCmd("MEAS1?\n",300,data,32) ){
+        ;//ui->textBrowser->append(QString::fromLocal8Bit(data));
+    }else{
+        ui->textBrowser->append("timeout!");
+    }
+
+}
+
+void MainWindow::startTestVictor()
+{
+    char data[32];
+
+    disconnect( mSerialport,SIGNAL(readyRead()),this, SLOT(solt_mSerial_ReadReady()) );
+
+    sendVictorCmd("ADC\n",300,data,32);
+
+    sendVictorCmd("RATE M\n",300,data,32);
+
+    sendVictorCmd("RANGE 5\n",300,data,32);
+
+
+
+    connect( &mtestTimer, SIGNAL(timeout()), SLOT(victorEvent()) );
+
+
+    mtestTimer.start(10);
+    //connect( mSerialport,SIGNAL(readyRead()),this, SLOT(solt_mSerial_ReadReady()) );
 }
