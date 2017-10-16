@@ -188,6 +188,35 @@ void ExcelEngine::Close()
     }
 }
 
+
+
+QString ExcelEngine::getFilePath()
+{
+    if( IsOpen() ){
+        return sXlsFile;
+    }else{
+        return "";
+    }
+}
+
+bool ExcelEngine::switchFile(QString file)
+{
+
+    pWorkbooks = pExcel->querySubObject("WorkBooks"); //获取工作簿
+    pWorkbook = pWorkbooks->querySubObject("Open(QString, QVariant)",sXlsFile,QVariant(0)); //打开xls对应的工作簿
+
+    Save();
+    pWorkbook->dynamicCall("Close(bool)", true);
+    sXlsFile = file;
+    pWorkbook = pWorkbooks->querySubObject("Open(QString, QVariant)",sXlsFile,QVariant(0));
+    if( openWorkSheet( 1 ) )
+        bIsOpen = true;
+    else
+        bIsOpen  = false;
+
+    return bIsOpen;
+}
+
 /**
   *@brief 把tableWidget中的数据保存到excel中
   *@param tableWidget : 指向GUI中的tablewidget指针

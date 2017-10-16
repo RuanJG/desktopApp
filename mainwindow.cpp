@@ -23,6 +23,7 @@ MainWindow::MainWindow(QWidget *parent) :
     noisePlot(),
     mExcelTestIndex(0),
     mExcelTestCount(0),
+    mExcelTitleRow(0),
     mtestTimer(),
     mNoiseFalseCount(0),
     mCurrentFalseCount(0),
@@ -41,6 +42,7 @@ MainWindow::MainWindow(QWidget *parent) :
     on_checkBox_clicked();
 
     saveRecordToExcel(0,0,0,USER_RES_ERROR_FLAG);
+    ui->excelFilePathlineEdit->setText( mExcel.getFilePath() );
 
     initIap();
 
@@ -379,21 +381,57 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
         QDir mdir;
         mdir.mkpath(filedirPath);
         filename =QDir::toNativeSeparators( filedirPath+"/"+filename );
-        //new file ,so alway open sheet 1
-        if(! mdir.mkpath(filedirPath) || !mExcel.Open(filename,1,true) ){
-            QMessageBox::warning(this,"Warning",tr("打开Excel文档失败"));
-            return;
+
+        //use the select file or auto make file
+        if( ui->excelFilePathlineEdit->text().length()> 0 ){
+            filename = ui->excelFilePathlineEdit->text();
+            if(!mExcel.Open(filename,1,true)){
+                QMessageBox::warning(this,"Warning",tr("打开Excel文档失败"));
+                return;
+            }
+            //qDebug() <<"Sheet count=" + QString::number(mExcel.getSheetCount()) << endl;
+            //qDebug() <<"row count=" + QString::number(mExcel.GetUsedRagneRowCount()) << endl;
+            //qDebug() <<"col count=" + QString::number(mExcel.GetUsedRagneColumnCount()) << endl;
+            //qDebug() <<"start row count=" + QString::number(mExcel.getUsedRagneStartRow()) << endl;
+            //qDebug() <<"start col count=" + QString::number(mExcel.getUsedRagneStartColumn()) << endl;
+            int usedRow = mExcel.GetUsedRagneRowCount();
+            int usedCol = mExcel.GetUsedRagneColumnCount();
+            if( usedCol == 11 && usedRow > 1 ){
+                newsheet = false;
+                mExcelTitleRow = 1;
+                mExcelCurrentRow = usedRow+1;
+            }else{
+                newsheet = true;
+                mExcelTitleRow = usedRow+2;
+                mExcelCurrentRow = mExcelTitleRow+1;
+            }
+            mExcelTestIndex = newsheet? 1:1+mExcel.GetCellData(usedRow,1).toInt() ;
+            mExcelTestCount = 0;
+            mNoiseFalseCount =newsheet? 0: mExcel.GetCellData(mExcelTitleRow+1,10).toInt();
+            mCurrentFalseCount =newsheet? 0: mExcel.GetCellData(mExcelTitleRow+1,11).toInt();;
+            mFalseCount =newsheet? 0: mExcel.GetCellData(mExcelTitleRow+1,9).toInt(); ;
+
+        }else{
+            if(!mdir.mkpath(filedirPath) || !mExcel.Open(filename,1,true) ){
+                QMessageBox::warning(this,"Warning",tr("创建Excel文档失败"));
+                return;
+            }
+            newsheet = true;
+            mExcelCurrentRow = 2;
+            mExcelTitleRow = 1;
+            mExcelTestIndex = 1;
+            mExcelTestCount = 0;
+            mNoiseFalseCount =0;
+            mCurrentFalseCount =0;
+            mFalseCount =0 ;
         }
-        newsheet = true;
-        mExcelCurrentRow = 1;
-        mExcelTestIndex = 1;
-        mExcelTestCount = 0;
-        mNoiseFalseCount =0;
-        mCurrentFalseCount =0;
-        mFalseCount =0 ;
     }
 
     if( mExcelCurrentRow >= mExcel.getMaxRowCount() ){
+        //不做续页处理
+        QMessageBox::warning(this,"Warning",tr("Excel文档己经填满，请保存数据后重新开始程序"));
+        return;
+        //续页处理
         unsigned int sheetid = mExcel.getCurrentSheetId();
         if( sheetid >= mExcel.getSheetCount() ){
             QMessageBox::warning(this,"Error",tr("Excel文档己经填满，请保存数据后重新开始程序"));
@@ -407,23 +445,24 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
     }
 
     if( newsheet ){
-        mExcelCurrentRow = 1 ; //mExcel.getStartRow();
+        //不做续页处理
+        //mExcelCurrentRow = 1 ; //mExcel.getStartRow();
+
         int col = 1;
-        if( mExcel.SetCellData(mExcelCurrentRow, col++, "Index") \
-                && mExcel.SetCellData(mExcelCurrentRow, col++, "Shell") \
-                && mExcel.SetCellData(mExcelCurrentRow, col++, "Color") \
-                && mExcel.SetCellData(mExcelCurrentRow, col++, "Noise(DB)") \
-                && mExcel.SetCellData(mExcelCurrentRow, col++, "Current(A)") \
+        if( mExcel.SetCellData(mExcelTitleRow, col++, "Index") \
+                && mExcel.SetCellData(mExcelTitleRow, col++, "Shell") \
+                && mExcel.SetCellData(mExcelTitleRow, col++, "Color") \
+                && mExcel.SetCellData(mExcelTitleRow, col++, "Noise(DB)") \
+                && mExcel.SetCellData(mExcelTitleRow, col++, "Current(A)") \
                 //&& mExcel.SetCellData(mExcelCurrentRow, col++, "测量次数")
-                && mExcel.SetCellData(mExcelCurrentRow, col++, "Result"))
+                && mExcel.SetCellData(mExcelTitleRow, col++, "Result"))
         {
             //set 统计结果
             col++;
-            mExcel.SetCellData(mExcelCurrentRow, col++, "Total Count");
-            mExcel.SetCellData(mExcelCurrentRow, col++, "False Count");
-            mExcel.SetCellData(mExcelCurrentRow, col++, "Noise False Count");
-            mExcel.SetCellData(mExcelCurrentRow, col++, "Current False Count");
-            mExcelCurrentRow++;
+            mExcel.SetCellData(mExcelTitleRow, col++, "Total Count");
+            mExcel.SetCellData(mExcelTitleRow, col++, "False Count");
+            mExcel.SetCellData(mExcelTitleRow, col++, "Noise False Count");
+            mExcel.SetCellData(mExcelTitleRow, col++, "Current False Count");
         }else{
             QMessageBox::warning(this,"Warning",tr("Excel文档写入标题失败"));
             return;
@@ -480,7 +519,7 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
     if(  mExcel.SetCellData(mExcelCurrentRow, col++, db) \
             && mExcel.SetCellData(mExcelCurrentRow, col++, QString::number(current) ) \
             //&& mExcel.SetCellData(mExcelCurrentRow, col++, count)
-            && mExcel.SetCellData(mExcelCurrentRow, col++, res))
+            && mExcel.SetCellData(mExcelCurrentRow, col, res))
     {
         if( error == 0){
             mExcel.setCellBackgroundColor(mExcelCurrentRow,col,QColor(0,255,0));
@@ -488,6 +527,7 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
             mExcel.setCellBackgroundColor(mExcelCurrentRow,col,QColor(255,0,0));
         }
 
+        col++;
         if( mExcelTestCount >= (ui->testCountcomboBox->currentIndex()) ){
             if( mExcelTestCount >= 1 )
                 mExcel.mergeUnit(mExcelCurrentRow-mExcelTestCount-1,QChar('A'), mExcelCurrentRow-1,QChar('A'));
@@ -496,15 +536,16 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
             mNoiseFalseCount += noiseFalse;
             mCurrentFalseCount += currentFalse;
             mFalseCount += (noiseFalse+currentFalse > 0) ? 1:0 ;
-            mExcel.SetCellData(2, col+1, QString::number(mExcelTestIndex) );
-            mExcel.SetCellData(2, col+2, QString::number(mFalseCount) );
-            mExcel.SetCellData(2, col+3, QString::number(mNoiseFalseCount) );
-            mExcel.SetCellData(2, col+4, QString::number(mCurrentFalseCount) );
+            mExcel.SetCellData(mExcelTitleRow+1, col+1, QString::number(mExcelTestIndex) );
+            mExcel.SetCellData(mExcelTitleRow+1, col+2, QString::number(mFalseCount) );
+            mExcel.SetCellData(mExcelTitleRow+1, col+3, QString::number(mNoiseFalseCount) );
+            mExcel.SetCellData(mExcelTitleRow+1, col+4, QString::number(mCurrentFalseCount) );
 
-            mExcel.SetCellData(3, col+2, QString::number(mFalseCount*100/mExcelTestIndex)+"%" );
-            mExcel.SetCellData(3, col+3, QString::number(mNoiseFalseCount*100/mExcelTestIndex)+"%"  );
-            mExcel.SetCellData(3, col+4, QString::number(mCurrentFalseCount*100/mExcelTestIndex)+"%"  );
-
+            if( mExcelTestIndex > 3 ){
+                mExcel.SetCellData(mExcelTitleRow+2, col+2, QString::number(mFalseCount*100/mExcelTestIndex)+"%" );
+                mExcel.SetCellData(mExcelTitleRow+2, col+3, QString::number(mNoiseFalseCount*100/mExcelTestIndex)+"%"  );
+                mExcel.SetCellData(mExcelTitleRow+2, col+4, QString::number(mCurrentFalseCount*100/mExcelTestIndex)+"%"  );
+            }
             mExcelTestIndex++;
 
         }else{
@@ -568,7 +609,7 @@ void MainWindow::on_ClearTextBrowButton_clicked()
 {
     ui->textBrowser->clear();
 
-//    saveRecordToExcel(60,0.71,9,1);
+//    saveRecordToExcel(70,0.41,9,2);
 //    displayResult(60,0.55,0);
 //    currentPlot.append(0.3+(float)(rand()%3)/10 );
 //    noisePlot.append( 55.0+ (float)(rand()%30));
@@ -801,3 +842,47 @@ void MainWindow::startTestVictor()
     mtestTimer.start(10);
     //connect( mSerialport,SIGNAL(readyRead()),this, SLOT(solt_mSerial_ReadReady()) );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+void MainWindow::on_excelFileSelectpushButton_clicked()
+{
+    QString fileName = QFileDialog::getOpenFileName(this,
+        tr("Open Excel File"), "", tr("Excel Files (*.xlsx)"));
+
+    if( fileName.length() > 0 ){
+
+        if( mExcel.IsValid())
+            mExcel.Close();
+
+        ui->excelFilePathlineEdit->setText(fileName);
+        saveRecordToExcel(0,0,0,USER_RES_ERROR_FLAG);
+    }
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

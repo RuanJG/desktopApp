@@ -230,6 +230,8 @@ private slots:
 
     void victorEvent();
 
+    void on_excelFileSelectpushButton_clicked();
+
 private:
     Ui::MainWindow *ui;
     QSerialPort *mSerialport;
@@ -243,6 +245,7 @@ private:
     ResPlot noisePlot;
     int mExcelTestIndex;
     int mExcelTestCount;
+    int mExcelTitleRow;
 
     QTimer  mtestTimer;
     unsigned int mNoiseFalseCount;

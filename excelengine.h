@@ -41,6 +41,8 @@ public:
     bool Open(QString xlsFile, unsigned int nSheet = 1, bool visible = false, QString type=TYPE_EXECL_APP_MS);
     void Save();                //����xls����
     void Close();               //�ر�xls����
+    QString getFilePath();
+    bool switchFile(QString file);
 
     bool SaveDataFrTable(QTableWidget *tableWidget); //�������ݵ�xls
     bool ReadDataToTable(QTableWidget *tableWidget); //��xls��ȡ���ݵ�ui
