@@ -49,7 +49,7 @@ MainWindow::MainWindow(QWidget *parent) :
 
     currentPlot.setup(ui->currentPlotwidget, \
                       QCPRange(ui->currentMinLineEdit->text().toFloat(), ui->currentMaxLineEdit->text().toFloat()),\
-                      QCPRange(0,0.8),"Current(A)");
+                      QCPRange(0,800),"Current(mA)");
 
     noisePlot.setup(ui->noisePlotwidget, \
                       QCPRange(ui->VolumeMinlineEdit->text().toFloat(), ui->VolumeMaxlineEdit->text().toFloat()),\
@@ -221,6 +221,13 @@ void MainWindow::on_SerialButton_clicked()
     }else{
         if( open_serial() ){
             ui->SerialButton->setText(tr("Disconnect 断开"));
+            //on_setcurrentButton_clicked();
+            //on_setVolumeButton_clicked();
+
+            //to get the config
+            Chunk chunk;
+            chunk.append( USER_CMD_GET_MAXMIN_TAG );
+            serial_send_packget( chunk );
         }
     }
 }
@@ -272,6 +279,8 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
         count = data[9];
         error = data[10];
 
+        current *= 1000; // A->mA
+
         if( error ==0 && count == 0 ){
             // this packget is not a result , is the test data in each record
             currentPlot.append(current);
@@ -289,11 +298,41 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
         break;
     }
 
+
+    case USER_CONFIG_TAG:{
+        //tag[0]+config_valide[1]+currentmax(A) + currentmin(A) + dbmax + dbmin
+        if( len != 18 )
+            return;
+
+        int dbmin,dbmax;
+        float cmax,cmin;
+
+        if( data[1] != 1){
+            ui->textBrowser->append("get an error config");
+            break;
+        }
+        memcpy((char*)&cmax, data+2, 4);
+        memcpy((char*)&cmin , data+6 , 4);
+        memcpy((char*)&dbmax, data+10, 4);
+        memcpy((char*)&dbmin , data+14 , 4);
+
+        ui->currentMaxLineEdit->setText( QString::number(cmax*1000));
+        ui->currentMinLineEdit->setText( QString::number(cmin*1000));
+        ui->VolumeMaxlineEdit->setText( QString::number(dbmax) );
+        ui->VolumeMinlineEdit->setText( QString::number(dbmin) );
+
+        currentPlot.changeRange(cmin*1000,cmax*1000);
+        noisePlot.changeRange( dbmin, dbmax);
+
+        break;
+    }
+
     case USER_LOG_TAG:{
         QString str = QString::fromUtf8( (const char*)(data+1), len-1);
         ui->textBrowser->append(str);
         break;
     }
+
 
     case USER_START_TAG:{
         //ui->textBrowser->clear();
@@ -327,6 +366,7 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
 
 void MainWindow::displayResult( int db, float current, int error )
 {
+
     ui->currentlcdNumber->display(current);
     ui->noiselcdNumber->display(db);
 
@@ -373,6 +413,7 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
     bool newsheet = false;
     int noiseFalse=0;
     int currentFalse = 0;
+
 
     if( ! mExcel.IsValid() || ! mExcel.IsOpen() ){
 
@@ -453,7 +494,7 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
                 && mExcel.SetCellData(mExcelTitleRow, col++, "Shell") \
                 && mExcel.SetCellData(mExcelTitleRow, col++, "Color") \
                 && mExcel.SetCellData(mExcelTitleRow, col++, "Noise(DB)") \
-                && mExcel.SetCellData(mExcelTitleRow, col++, "Current(A)") \
+                && mExcel.SetCellData(mExcelTitleRow, col++, "Current(mA)") \
                 //&& mExcel.SetCellData(mExcelCurrentRow, col++, "测量次数")
                 && mExcel.SetCellData(mExcelTitleRow, col++, "Result"))
         {
@@ -574,6 +615,10 @@ void MainWindow::on_setcurrentButton_clicked()
 {
     float max = ui->currentMaxLineEdit->text().toFloat();
     float min = ui->currentMinLineEdit->text().toFloat();
+
+    // mA -> A
+    max /= 1000;
+    min /= 1000;
     if( max > min){
 
         //tag+max+min

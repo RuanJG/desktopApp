@@ -16,9 +16,11 @@
 #define USER_DATA_TAG	1
 #define USER_LOG_TAG	2
 #define USER_START_TAG  3
+#define USER_CONFIG_TAG	4
 #define USER_CMD_CHMOD_TAG  4
 #define USER_CMD_CURRENT_MAXMIN_TAG 5
 #define USER_CMD_VOICE_MAXMIN_TAG   6
+#define USER_CMD_GET_MAXMIN_TAG 7
 
 //packget body : result error value
 #define USER_RES_CURRENT_FALSE_FLAG 1
@@ -37,6 +39,8 @@ class MainWindow;
 
 
 #include <QFont>
+
+#define MAX_X_COUNT 50
 class ResPlot
 {
 private:
@@ -94,15 +98,19 @@ public:
 
         // prepare x axis with country labels:
         QVector<QString> labels;
-        mticks << 1 << 2 << 3 << 4 << 5 << 6 << 7 << 8 << 9 <<10 << 11;
-        labels << "1" << "2" << "3" << "4" << "5" << "6" << "7" <<"8" << "9" << "10" <<"11";
+        //mticks << 1 << 2 << 3 << 4 << 5 << 6 << 7 << 8 << 9 <<10 << 11;
+        //labels << "1" << "2" << "3" << "4" << "5" << "6" << "7" <<"8" << "9" << "10" <<"11";
+        for ( int i=1; i< MAX_X_COUNT+2 ; i++ ){
+            mticks << i;
+            labels << QString::number(i);
+        }
         QSharedPointer<QCPAxisTickerText> textTicker(new QCPAxisTickerText);
         textTicker->addTicks(mticks, labels);
         customPlot->xAxis->setTicker(textTicker);
         customPlot->xAxis->setTickLabelRotation(60);
         customPlot->xAxis->setSubTicks(false);
         customPlot->xAxis->setTickLength(0, 3);
-        customPlot->xAxis->setRange(0, 11);
+        customPlot->xAxis->setRange(0, MAX_X_COUNT);
         customPlot->xAxis->setBasePen(QPen(Qt::white));
         customPlot->xAxis->setTickPen(QPen(Qt::white));
         customPlot->xAxis->grid()->setVisible(true);
@@ -165,6 +173,7 @@ public:
         hightBar->setData(ticks,hightBarData);
         middleBar->setData(ticks, middleBarData);
         lowBar->setData(ticks,lowBarData);
+
 
         hightBar->moveAbove(middleBar);
         middleBar->moveAbove(lowBar);

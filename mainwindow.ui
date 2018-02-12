@@ -45,6 +45,9 @@
           <layout class="QGridLayout" name="gridLayout_3">
            <item row="1" column="0">
             <widget class="QGroupBox" name="groupBox_8">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
              <property name="maximumSize">
               <size>
                <width>16777215</width>
@@ -135,7 +138,7 @@
                   <bool>false</bool>
                  </property>
                  <property name="title">
-                  <string>Current 电流 (A)</string>
+                  <string>Current 电流 (mA)</string>
                  </property>
                  <layout class="QGridLayout" name="gridLayout">
                   <item row="0" column="0">
@@ -524,7 +527,7 @@
              <item>
               <widget class="QLabel" name="label">
                <property name="text">
-                <string>A</string>
+                <string>mA</string>
                </property>
               </widget>
              </item>
@@ -564,7 +567,7 @@
              <item>
               <widget class="QLabel" name="label_2">
                <property name="text">
-                <string>A</string>
+                <string>mA</string>
                </property>
               </widget>
              </item>
