@@ -30,12 +30,10 @@ MainWindow::MainWindow(QWidget *parent) :
     mFalseCount(0)
 {
     ui->setupUi(this);
-    ui->currentMaxLineEdit->setText(tr("0.500"));
-    ui->currentMinLineEdit->setText(tr("0.400"));
+    ui->currentMaxLineEdit->setText(tr("500"));
+    ui->currentMinLineEdit->setText(tr("400"));
     ui->VolumeMaxlineEdit->setText(tr("65"));
     ui->VolumeMinlineEdit->setText(tr("20"));
-    on_setcurrentButton_clicked();
-    on_setVolumeButton_clicked();
 
     update_serial_info();
 
@@ -221,8 +219,6 @@ void MainWindow::on_SerialButton_clicked()
     }else{
         if( open_serial() ){
             ui->SerialButton->setText(tr("Disconnect 断开"));
-            //on_setcurrentButton_clicked();
-            //on_setVolumeButton_clicked();
 
             //to get the config
             Chunk chunk;
@@ -667,7 +663,9 @@ void MainWindow::on_restartButton_clicked()
     if( mExcel.IsValid())
         mExcel.Close();
 
+    ui->excelFilePathlineEdit->setText("");
     saveRecordToExcel(0,0,0,USER_RES_ERROR_FLAG);
+    ui->excelFilePathlineEdit->setText( mExcel.getFilePath() );
 
     ui->currentlcdNumber->display(0);
     ui->noiselcdNumber->display(0);

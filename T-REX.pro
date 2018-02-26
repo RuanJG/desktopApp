@@ -40,3 +40,8 @@ HEADERS  += mainwindow.h \
     qcustomplot.h
 
 FORMS    += mainwindow.ui
+
+DISTFILES += \
+    t-rex.rc
+
+RC_FILE += t-rex.rc
