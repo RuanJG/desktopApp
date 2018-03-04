@@ -53,7 +53,7 @@ public:
 protected:
     virtual void iapSendBytes (unsigned char *data, size_t len)=0;
     virtual void iapEvent (int EventType, std::string value)=0;
-
+    virtual void iapResetDevice()=0;
 
 
 private:

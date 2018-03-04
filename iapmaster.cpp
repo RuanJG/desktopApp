@@ -215,6 +215,10 @@ void IapMaster::iapServer( IapAckPackget &ack )
 
 
     if( ack.type == PACKGET_ACK_RESTART ){
+        if( ack.value == 0 ){
+            iapResetDevice();
+            return;
+        }
         iapReset();
         sendStartPackget();
         iapEvent(EVENT_TYPE_STATUS, "iap restart..."  );
@@ -267,6 +271,7 @@ void IapMaster::iapServer( IapAckPackget &ack )
                 setStep( STEP_IDEL );
                 iapEvent(EVENT_TYPE_FINISH, "");
                 iapStop();
+                iapResetDevice();
             }else{
                 stringstream ss;
                 ss << "iap : STEP_JUMP unknow ack" ;

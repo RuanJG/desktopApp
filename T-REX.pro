@@ -12,8 +12,6 @@ QT      += serialport
 #use console for debug
 
 #CONFIG  += console
-#use execl
- QT +=  axcontainer
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets printsupport
 
@@ -26,18 +24,14 @@ SOURCES += main.cpp\
     chunk.cpp \
     uartcoder.cpp \
     util.cpp \
-    excelengine.cpp \
-    iapmaster.cpp \
-    qcustomplot.cpp
+    iapmaster.cpp
 
 HEADERS  += mainwindow.h \
     chunk.h \
     uartcoder.h \
     util.h \
     coder.h \
-    excelengine.h \
-    iapmaster.h \
-    qcustomplot.h
+    iapmaster.h
 
 FORMS    += mainwindow.ui
 
