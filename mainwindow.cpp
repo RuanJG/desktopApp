@@ -27,7 +27,10 @@ MainWindow::MainWindow(QWidget *parent) :
     mtestTimer(),
     mNoiseFalseCount(0),
     mCurrentFalseCount(0),
-    mFalseCount(0)
+    mFalseCount(0),
+    dataTestCounter(0),
+    mTxtfile()
+
 {
     ui->setupUi(this);
     ui->currentMaxLineEdit->setText(tr("500"));
@@ -40,7 +43,7 @@ MainWindow::MainWindow(QWidget *parent) :
     on_checkBox_clicked();
 
     saveRecordToExcel(0,0,0,USER_RES_ERROR_FLAG);
-    ui->excelFilePathlineEdit->setText( mExcel.getFilePath() );
+    if( USE_EXECL) ui->excelFilePathlineEdit->setText( mExcel.getFilePath() );
 
     initIap();
 
@@ -59,6 +62,8 @@ MainWindow::MainWindow(QWidget *parent) :
     }
     ui->testCountcomboBox->setCurrentIndex(0);
 
+    connect( &mtestTimer, SIGNAL(timeout()), SLOT(dataTestEvent()) );
+
 }
 
 MainWindow::~MainWindow()
@@ -66,6 +71,8 @@ MainWindow::~MainWindow()
     if( mExcel.IsValid() )
         mExcel.Close();
 
+    if( mTxtfile.isOpen() )
+        mTxtfile.close();
     delete ui;
 }
 
@@ -91,6 +98,7 @@ void MainWindow::update_serial_info()
     ui->SerialcomboBox->clear();
 
     QList<QSerialPortInfo> serialPortInfoList = QSerialPortInfo::availablePorts();
+
     foreach (const QSerialPortInfo &serialPortInfo, serialPortInfoList) {
         if( serialPortInfo.portName() != NULL){
             ui->SerialcomboBox->addItem(serialPortInfo.portName());
@@ -213,6 +221,15 @@ void MainWindow::serial_send_packget( const Chunk &chunk)
 
 void MainWindow::on_SerialButton_clicked()
 {
+
+#if 0
+    if( mtestTimer.isActive() )
+        mtestTimer.stop();
+    else
+        mtestTimer.start(10);
+    return;
+#endif
+
     if( mSerialport != NULL && mSerialport->isOpen() ){
         close_serial();
         ui->SerialButton->setText(tr("Connect 连接"));
@@ -255,7 +272,38 @@ void MainWindow::handle_Serial_Data( QByteArray &bytes )
 
 }
 
+void MainWindow::testSendStartPackget(){
+    unsigned char data=3;
+    handle_device_message( &data, 1 );
+}
 
+void MainWindow::testSendDataPackget(int db,float current,int count,int error)
+{
+    unsigned char data[11];
+
+    data[0]=1;
+    memcpy(data+1,(char*)&db , 4);
+    memcpy( data+5 ,(char*)&current ,  4);
+    data[9] = count  ;
+    data[10] = error ;
+
+    handle_device_message( data, sizeof(data) );
+}
+
+void MainWindow::dataTestEvent()
+{
+    if( dataTestCounter == 0 ){
+        testSendStartPackget();
+    }else{
+        if( dataTestCounter < 50){
+            testSendDataPackget( 40,0.45,0,0);
+        }else{
+            testSendDataPackget( 40,0.45,50,0);
+        }
+    }
+    dataTestCounter++;
+    dataTestCounter %= 51;
+}
 
 
 void MainWindow::handle_device_message( const unsigned char *data, int len )
@@ -288,7 +336,7 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
         displayResult(db, current , error);
 
 
-        ui->textBrowser->append("db="+QString::number(db) +"db, current="+QString::number(current)+"mA, count=" + QString::number(count) +
+       ui->textBrowser->append("db="+QString::number(db) +"db, current="+QString::number(current)+"mA, count=" + QString::number(count) +
                                 ", error="+ QString::number(error) );
 
         break;
@@ -331,7 +379,7 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
 
 
     case USER_START_TAG:{
-        //ui->textBrowser->clear();
+        ui->textBrowser->clear();
         ui->textBrowser->append("start:");
         ui->currentlcdNumber->display(0);
         ui->noiselcdNumber->display(0);
@@ -403,6 +451,58 @@ void MainWindow::displayResult( int db, float current, int error )
 
 
 
+void MainWindow::saveRecordToTXT(int db, float current, int count, int error)
+{
+    QString filename = "T-REX-Report_"+QDateTime::currentDateTime().toString("yyyy-MM-dd_hh-mm-ss")+".txt";
+    QString filedirPath = QDir::currentPath()+"/reports";
+    QDir mdir;
+    bool needTitle= false;
+
+    if( count == 0 || error & USER_RES_ERROR_FLAG)return;
+
+    mdir.mkpath(filedirPath);
+    filename =QDir::toNativeSeparators( filedirPath+"/"+filename );
+    if( ui->excelFilePathlineEdit->text().length()> 0 ){
+        filename = ui->excelFilePathlineEdit->text();
+    }else{
+        ui->excelFilePathlineEdit->setText(filename);
+    }
+
+    if( !mTxtfile.isOpen() || mTxtfile.fileName() != QFile(filename).fileName()){
+        //qDebug() << (filename+"==VS=="+mTxtfile.fileName());
+        needTitle = true;
+        if( mTxtfile.isOpen())
+            mTxtfile.close();
+        mTxtfile.setFileName(filename);
+    }
+
+    if( !mTxtfile.isOpen() && !mTxtfile.open(QIODevice::ReadWrite | QIODevice::Text) ){
+        ui->textBrowser->append("file open false\n");
+        QMessageBox::warning(this,"Error",tr("打开文档失败"));
+        return;
+    }
+    mTxtfile.seek( mTxtfile.size() );
+
+    if( needTitle ){
+        //mTxtfile.write("\n\n");
+        mTxtfile.write("Index,Volume(DB),Current(mA),Volume-Fail,Current-Fail\n");
+        mExcelTestIndex = 1;
+    }
+
+    QString data;
+    data = QString::number(mExcelTestIndex)+","+QString::number(db)+","+QString::number(current);//+","+"Pass"+"\n";
+    data = data+","+ (error == USER_RES_VOICE_FALSE_FLAG ? "1":"0");
+    data = data+","+ (error == USER_RES_CURRENT_FALSE_FLAG ? "1":"0");
+    data = data+"\n";
+
+    //txtfile.seek( txtfile.size() );
+    mTxtfile.write(data.toLocal8Bit());
+    mTxtfile.flush();
+    //txtfile.close();
+
+    mExcelTestIndex++;
+}
+
 
 void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
 {
@@ -410,6 +510,11 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
     int noiseFalse=0;
     int currentFalse = 0;
 
+    //use txt instead of execl
+    if( USE_TXT ){
+        saveRecordToTXT(db,current,count,error);
+        return;
+    }
 
     if( ! mExcel.IsValid() || ! mExcel.IsOpen() ){
 
@@ -500,6 +605,7 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
             mExcel.SetCellData(mExcelTitleRow, col++, "False Count");
             mExcel.SetCellData(mExcelTitleRow, col++, "Noise False Count");
             mExcel.SetCellData(mExcelTitleRow, col++, "Current False Count");
+            mExcel.Save();
         }else{
             QMessageBox::warning(this,"Warning",tr("Excel文档写入标题失败"));
             return;
@@ -721,6 +827,21 @@ void MainWindow::iapEvent(int EventType, std::string value)
     }
 }
 
+void MainWindow::iapResetDevice()
+{
+//    //QMessageBox::warning(this,"Warnning",tr("选择IAP文件"));
+//    close_serial();
+//    QThread::msleep(1000);
+//    QList<QSerialPortInfo> serialPortInfoList ;
+
+//    while(1){
+//        serialPortInfoList  = QSerialPortInfo::availablePorts();
+//        if( serialPortInfoList.count() > 0) break;
+//        QThread::msleep(1000);
+//    }
+//    open_serial();
+}
+
 
 void MainWindow::iapTickHandler(){
 
@@ -914,6 +1035,8 @@ void MainWindow::on_excelFileSelectpushButton_clicked()
 
 
 }
+
+
 
 
 

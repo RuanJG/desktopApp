@@ -197,7 +197,7 @@ void IapMaster::iapServer( IapAckPackget &ack )
             break;
         }
         case PACKGET_ACK_FALSE_SEQ_FALSE:{
-            res = "seq false";
+            res = "seq false: "+ std::to_string(mCurrentDataSeq) ;
             break;
         }
         default:{
@@ -215,6 +215,10 @@ void IapMaster::iapServer( IapAckPackget &ack )
 
 
     if( ack.type == PACKGET_ACK_RESTART ){
+        if( ack.value == 0 ){
+            iapResetDevice();
+            return;
+        }
         iapReset();
         sendStartPackget();
         iapEvent(EVENT_TYPE_STATUS, "iap restart..."  );
@@ -252,7 +256,7 @@ void IapMaster::iapServer( IapAckPackget &ack )
                     sendDataPackget();
                     mTimeOutMs = 1000;
                     std::stringstream  sss;
-                    sss << "send " << mCurrentSize << "/" << mFirmwareSize ;
+                    sss << "seq" << std::to_string(mCurrentDataSeq) << ", send " << mCurrentSize << "/" << mFirmwareSize ;
                     iapEvent(EVENT_TYPE_STATUS, sss.str()  );
                 }
             }else{
@@ -267,6 +271,7 @@ void IapMaster::iapServer( IapAckPackget &ack )
                 setStep( STEP_IDEL );
                 iapEvent(EVENT_TYPE_FINISH, "");
                 iapStop();
+                iapResetDevice();
             }else{
                 stringstream ss;
                 ss << "iap : STEP_JUMP unknow ack" ;
@@ -333,9 +338,12 @@ void IapMaster::sendDataPackget()
     if( len <= 0 )
         return;
 
+    unsigned char seq = ((++mCurrentDataSeq)%PACKGET_MAX_DATA_SEQ);
+    mCurrentDataSeq = seq;
+
     Chunk chunk;
     chunk.append(PACKGET_DATA_ID);
-    chunk.append( ((++mCurrentDataSeq)%PACKGET_MAX_DATA_SEQ) );
+    chunk.append( seq );
     chunk.append(mFirmwareBuffer+mCurrentSize , len);
     mCurrentSize += len;
 

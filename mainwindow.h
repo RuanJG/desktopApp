@@ -32,6 +32,10 @@
 #define USER_MODE_OFFLINE 2
 
 
+//if use execl
+#define USE_EXECL FALSE
+#define USE_TXT (!USE_EXECL)
+
 namespace Ui {
 class MainWindow;
 }
@@ -63,6 +67,11 @@ public:
     void setup(QCustomPlot *cplot, QCPRange maxminRange, QCPRange yrange, QString yLable){
         customPlot = cplot;
         mValidRange = maxminRange;
+
+        for ( int i=1; i<= MAX_X_COUNT ; i++ ){
+            mticks << i;
+        }
+
         hightBar = new QCPBars(customPlot->xAxis, customPlot->yAxis);
         middleBar = new QCPBars(customPlot->xAxis, customPlot->yAxis);
         lowBar = new QCPBars(customPlot->xAxis, customPlot->yAxis);
@@ -88,6 +97,34 @@ public:
         middleBar->moveAbove(lowBar);
 
 
+
+        // add init
+        /*
+        for ( int i=1; i<= MAX_X_COUNT ; i++ ){
+            middleBarData << 0;
+            hightBarData << 0;
+            lowBarData << 0;
+        }
+
+        QVector<double> ticks;
+        for( int i=0; i< hightBarData.size(); i++){
+            ticks<< i+1;
+        }
+
+        hightBar->setData(ticks,hightBarData);
+        middleBar->setData(ticks, middleBarData);
+        lowBar->setData(ticks,lowBarData);
+
+
+        hightBar->moveAbove(middleBar);
+        middleBar->moveAbove(lowBar);
+*/
+
+
+
+
+
+
         // set dark background gradient:
         QLinearGradient gradient(0, 0, 0, 400);
         gradient.setColorAt(0, QColor(90, 90, 90));
@@ -100,8 +137,7 @@ public:
         QVector<QString> labels;
         //mticks << 1 << 2 << 3 << 4 << 5 << 6 << 7 << 8 << 9 <<10 << 11;
         //labels << "1" << "2" << "3" << "4" << "5" << "6" << "7" <<"8" << "9" << "10" <<"11";
-        for ( int i=1; i< MAX_X_COUNT+2 ; i++ ){
-            mticks << i;
+        for ( int i=1; i<= MAX_X_COUNT ; i++ ){
             labels << QString::number(i);
         }
         QSharedPointer<QCPAxisTickerText> textTicker(new QCPAxisTickerText);
@@ -150,6 +186,7 @@ public:
 
 
     void append( float data){
+        //return;
         //qDebug() << mValidRange.lower << "," << mValidRange.upper << ":" << data << endl;
         if( data > mValidRange.upper ){
             middleBarData << mValidRange.upper;
@@ -170,9 +207,9 @@ public:
             ticks<< i+1;
         }
 
-        hightBar->setData(ticks,hightBarData);
-        middleBar->setData(ticks, middleBarData);
-        lowBar->setData(ticks,lowBarData);
+        hightBar->setData(ticks,hightBarData,true);
+        middleBar->setData(ticks, middleBarData,true);
+        lowBar->setData(ticks,lowBarData,true);
 
 
         hightBar->moveAbove(middleBar);
@@ -182,12 +219,14 @@ public:
     }
 
     void clear( ){
+        //return;
+        QVector<double> ticks;
         middleBarData.clear();
         hightBarData.clear();
         lowBarData.clear();
-        hightBar->setData(mticks,hightBarData);
-        middleBar->setData(mticks, middleBarData);
-        lowBar->setData(mticks,lowBarData);
+        hightBar->setData(ticks,hightBarData);
+        middleBar->setData(ticks, middleBarData);
+        lowBar->setData(ticks,lowBarData);
         customPlot->replot();
     }
 
@@ -211,6 +250,9 @@ public:
 
     void closeEvent(QCloseEvent *event);
 
+    void testSendStartPackget();
+    void testSendDataPackget(int db, float current, int count, int error);
+    void saveRecordToTXT(int db, float current, int count, int error);
 private slots:
     void on_save_close_Button_clicked();
 
@@ -241,6 +283,8 @@ private slots:
 
     void on_excelFileSelectpushButton_clicked();
 
+    void dataTestEvent();
+
 private:
     Ui::MainWindow *ui;
     QSerialPort *mSerialport;
@@ -261,6 +305,9 @@ private:
     unsigned int mCurrentFalseCount;
     unsigned int mFalseCount;
 
+    int dataTestCounter;
+    QFile mTxtfile;
+
     void update_serial_info();
     void close_serial();
     bool open_serial();
@@ -271,6 +318,7 @@ private:
     void saveRecordToExcel(int db, float current, int count, int error);
     void iapSendBytes(unsigned char *data, size_t len);
     void iapEvent(int EventType, std::string value);
+    void iapResetDevice();
     void stopIap();
     bool startIap();
     void initIap();
