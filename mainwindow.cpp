@@ -332,6 +332,13 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
             return;
         }
 
+        //ack
+        Chunk chunk;
+        chunk.append( USER_ACK_TAG );
+        chunk.append( 1 );
+        serial_send_packget( chunk );
+
+        //store
         saveRecordToExcel(db, current, count, error );
         displayResult(db, current , error);
 

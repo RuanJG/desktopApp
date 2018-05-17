@@ -21,6 +21,7 @@
 #define USER_CMD_CURRENT_MAXMIN_TAG 5
 #define USER_CMD_VOICE_MAXMIN_TAG   6
 #define USER_CMD_GET_MAXMIN_TAG 7
+#define USER_ACK_TAG 8
 
 //packget body : result error value
 #define USER_RES_CURRENT_FALSE_FLAG 1
