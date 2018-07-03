@@ -22,6 +22,8 @@
 #define USER_CMD_VOICE_MAXMIN_TAG   6
 #define USER_CMD_GET_MAXMIN_TAG 7
 #define USER_ACK_TAG 8
+#define USER_CMD_SET_SW_STATUS_TAG 9
+#define USER_CMD_SET_MACHINE_NO 10
 
 //packget body : result error value
 #define USER_RES_CURRENT_FALSE_FLAG 1
@@ -31,7 +33,7 @@
 //work_mode value
 #define USER_MODE_ONLINE 1
 #define USER_MODE_OFFLINE 2
-
+#define USER_MODE_SLAVER 3
 
 //if use execl
 #define USE_EXECL FALSE
@@ -254,6 +256,9 @@ public:
     void testSendStartPackget();
     void testSendDataPackget(int db, float current, int count, int error);
     void saveRecordToTXT(int db, float current, int count, int error);
+    QString ByteArrayToHexString(QByteArray data);
+    void startSlaveMode(int swMode);
+    void stopSlaveMode();
 private slots:
     void on_save_close_Button_clicked();
 
@@ -286,6 +291,8 @@ private slots:
 
     void dataTestEvent();
 
+    void on_setMachineNoButton_clicked();
+
 private:
     Ui::MainWindow *ui;
     QSerialPort *mSerialport;
@@ -308,6 +315,10 @@ private:
 
     int dataTestCounter;
     QFile mTxtfile;
+    QString mLogstr;
+    int mSwMode;
+    int mUsermode;
+    QString mMachineName;
 
     void update_serial_info();
     void close_serial();

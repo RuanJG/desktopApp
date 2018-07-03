@@ -29,7 +29,11 @@ MainWindow::MainWindow(QWidget *parent) :
     mCurrentFalseCount(0),
     mFalseCount(0),
     dataTestCounter(0),
-    mTxtfile()
+    mTxtfile(),
+    mLogstr(),
+    mSwMode(0),
+    mUsermode(USER_MODE_ONLINE),
+    mMachineName("")
 
 {
     ui->setupUi(this);
@@ -42,7 +46,7 @@ MainWindow::MainWindow(QWidget *parent) :
 
     on_checkBox_clicked();
 
-    saveRecordToExcel(0,0,0,USER_RES_ERROR_FLAG);
+    //saveRecordToExcel(0,0,0,USER_RES_ERROR_FLAG);
     if( USE_EXECL) ui->excelFilePathlineEdit->setText( mExcel.getFilePath() );
 
     initIap();
@@ -226,13 +230,15 @@ void MainWindow::on_SerialButton_clicked()
     if( mtestTimer.isActive() )
         mtestTimer.stop();
     else
-        mtestTimer.start(10);
+        mtestTimer.start(1000);
     return;
 #endif
 
     if( mSerialport != NULL && mSerialport->isOpen() ){
         close_serial();
         ui->SerialButton->setText(tr("Connect 连接"));
+        mMachineName = "";
+        ui->MachineNolineEdit->setText(mMachineName);
     }else{
         if( open_serial() ){
             ui->SerialButton->setText(tr("Disconnect 断开"));
@@ -241,15 +247,28 @@ void MainWindow::on_SerialButton_clicked()
             Chunk chunk;
             chunk.append( USER_CMD_GET_MAXMIN_TAG );
             serial_send_packget( chunk );
+
         }
     }
 }
 
+QString MainWindow::ByteArrayToHexString(QByteArray data){
+    QString ret(data.toHex().toUpper());
+    int len = ret.length()/2;
+    qDebug()<<len;
+    for(int i=1;i<len;i++)
+    {
+        qDebug()<<i;
+        ret.insert(2*i+i-1," ");
+    }
 
+    return ret;
+}
 
 void MainWindow::handle_Serial_Data( QByteArray &bytes )
 {
     std::list<Chunk> packgetList;
+    unsigned char *data;
 
     //Iap function
     if( this->isIapStarted() ){
@@ -257,8 +276,12 @@ void MainWindow::handle_Serial_Data( QByteArray &bytes )
         return;
     }
 
+
+
     mDecoder.decode((unsigned char *)bytes.data(),bytes.count(), packgetList);
 
+    //mLogstr += ByteArrayToHexString(bytes);
+    //ui->textBrowser->append("receive: "+ByteArrayToHexString(bytes));
     //qDebug() << "receive: " << bytes.count() << endl;
 
     std::list<Chunk>::iterator iter;
@@ -306,8 +329,46 @@ void MainWindow::dataTestEvent()
 }
 
 
+void MainWindow::startSlaveMode(int swMode)
+{
+    Chunk chunk;
+
+    chunk.append(USER_CMD_CHMOD_TAG);
+    chunk.append(USER_MODE_SLAVER);
+    serial_send_packget( chunk );
+    mUsermode = USER_MODE_SLAVER;
+
+    chunk.clear();
+
+    chunk.append(USER_CMD_SET_SW_STATUS_TAG);
+    chunk.append(swMode);
+    serial_send_packget( chunk );
+    mSwMode = swMode;
+
+}
+
+void MainWindow::stopSlaveMode()
+{
+
+    Chunk chunk;
+
+    chunk.append(USER_CMD_SET_SW_STATUS_TAG);
+    chunk.append(0);
+    serial_send_packget( chunk );
+
+    chunk.clear();
+
+    chunk.append(USER_CMD_CHMOD_TAG);
+    chunk.append(USER_MODE_ONLINE);
+    serial_send_packget( chunk );
+    mUsermode = USER_MODE_ONLINE;
+}
+
 void MainWindow::handle_device_message( const unsigned char *data, int len )
 {
+    //ui->textBrowser->append(mLogstr);
+    //mLogstr="";
+
     //head tag
     switch(data[0]){
 
@@ -329,6 +390,8 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
             // this packget is not a result , is the test data in each record
             currentPlot.append(current);
             noisePlot.append((float)db);
+            ui->textBrowser->append("db="+QString::number(db) +"db, current="+QString::number(current)+"mA, count=" + QString::number(count) +
+                                     ", error="+ QString::number(error) );
             return;
         }
 
@@ -351,8 +414,8 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
 
 
     case USER_CONFIG_TAG:{
-        //tag[0]+config_valide[1]+currentmax(A) + currentmin(A) + dbmax + dbmin
-        if( len != 18 )
+        //tag[0]+config_valide[1]+currentmax(A) + currentmin(A) + dbmax + dbmin + machine no
+        if( len != 19 )
             return;
 
         int dbmin,dbmax;
@@ -366,6 +429,16 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
         memcpy((char*)&cmin , data+6 , 4);
         memcpy((char*)&dbmax, data+10, 4);
         memcpy((char*)&dbmin , data+14 , 4);
+        mMachineName = QString::fromLocal8Bit( (char*)&data[18] ,1);
+        ui->MachineNolineEdit->setText(mMachineName);
+        if( mTxtfile.isOpen()){
+            QString filename = "T-REX-Test-"+mMachineName;
+            QString nfn = mTxtfile.fileName();
+            if( nfn.indexOf(filename) == -1 ){
+                mTxtfile.close();
+                mTxtfile.setFileName("");
+            }
+        }
 
         ui->currentMaxLineEdit->setText( QString::number(cmax*1000));
         ui->currentMinLineEdit->setText( QString::number(cmin*1000));
@@ -386,7 +459,7 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
 
 
     case USER_START_TAG:{
-        ui->textBrowser->clear();
+        //ui->textBrowser->clear();
         ui->textBrowser->append("start:");
         ui->currentlcdNumber->display(0);
         ui->noiselcdNumber->display(0);
@@ -424,7 +497,7 @@ void MainWindow::displayResult( int db, float current, int error )
     QPalette pe;
     QString passstr = tr("Pass 合格");
     QString falsestr = tr("False 不良");
-    QString errorstr = tr("Test Error");
+    QString errorstr = tr("测试故障");
     if( error & USER_RES_ERROR_FLAG ){
         pe.setColor(QPalette::WindowText,Qt::red);
         ui->currentlabel->setPalette(pe);
@@ -460,44 +533,50 @@ void MainWindow::displayResult( int db, float current, int error )
 
 void MainWindow::saveRecordToTXT(int db, float current, int count, int error)
 {
-    QString filename = "T-REX-Report_"+QDateTime::currentDateTime().toString("yyyy-MM-dd_hh-mm-ss")+".txt";
-    QString filedirPath = QDir::currentPath()+"/reports";
-    QDir mdir;
-    bool needTitle= false;
+
+    int intcurrent = current;
+
+
+    if( mMachineName.length()==0 ){
+        QMessageBox::warning(this,"Error",tr("获取测试机配置内容失败，请断开重连"));
+        return;
+    }
+
+    if( !mTxtfile.isOpen() )
+    {
+        QString filename = "T-REX-Test-"+mMachineName+"_"+QDateTime::currentDateTime().toString("yyyyMMdd-hhmmss")+".txt";
+        QString filedirPath = QDir::currentPath()+"/reports";
+        QDir mdir;
+
+        if( mTxtfile.fileName().length()==0 ){
+            mdir.mkpath(filedirPath);
+            filename =QDir::toNativeSeparators( filedirPath+"/"+filename );
+            ui->excelFilePathlineEdit->setText(filename);
+            mTxtfile.setFileName(filename);
+        }
+
+
+        if( !mTxtfile.open(QIODevice::ReadWrite | QIODevice::Text) ){
+            ui->textBrowser->append("file open false\n");
+            QMessageBox::warning(this,"Error",tr("打开文档失败"));
+            return;
+        }
+
+        mTxtfile.seek( mTxtfile.size() );
+
+        if( mTxtfile.size() ==0 ){
+            //mTxtfile.write("\n\n");
+            mTxtfile.write("Index,Volume(DB),Current(mA),Volume-Fail,Current-Fail\n");
+            mExcelTestIndex = 1;
+        }
+    }
+
+
 
     if( count == 0 || error & USER_RES_ERROR_FLAG)return;
 
-    mdir.mkpath(filedirPath);
-    filename =QDir::toNativeSeparators( filedirPath+"/"+filename );
-    if( ui->excelFilePathlineEdit->text().length()> 0 ){
-        filename = ui->excelFilePathlineEdit->text();
-    }else{
-        ui->excelFilePathlineEdit->setText(filename);
-    }
-
-    if( !mTxtfile.isOpen() || mTxtfile.fileName() != QFile(filename).fileName()){
-        //qDebug() << (filename+"==VS=="+mTxtfile.fileName());
-        needTitle = true;
-        if( mTxtfile.isOpen())
-            mTxtfile.close();
-        mTxtfile.setFileName(filename);
-    }
-
-    if( !mTxtfile.isOpen() && !mTxtfile.open(QIODevice::ReadWrite | QIODevice::Text) ){
-        ui->textBrowser->append("file open false\n");
-        QMessageBox::warning(this,"Error",tr("打开文档失败"));
-        return;
-    }
-    mTxtfile.seek( mTxtfile.size() );
-
-    if( needTitle ){
-        //mTxtfile.write("\n\n");
-        mTxtfile.write("Index,Volume(DB),Current(mA),Volume-Fail,Current-Fail\n");
-        mExcelTestIndex = 1;
-    }
-
     QString data;
-    data = QString::number(mExcelTestIndex)+","+QString::number(db)+","+QString::number(current);//+","+"Pass"+"\n";
+    data = QString::number(mExcelTestIndex)+","+QString::number(db)+","+QString::number(intcurrent);//+","+"Pass"+"\n";
     data = data+","+ (error == USER_RES_VOICE_FALSE_FLAG ? "1":"0");
     data = data+","+ (error == USER_RES_CURRENT_FALSE_FLAG ? "1":"0");
     data = data+"\n";
@@ -710,7 +789,6 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
         QMessageBox::warning(this,"Warning",tr("保存数据失败"));
     }
 
-
 }
 
 
@@ -724,6 +802,13 @@ void MainWindow::on_setcurrentButton_clicked()
 {
     float max = ui->currentMaxLineEdit->text().toFloat();
     float min = ui->currentMinLineEdit->text().toFloat();
+
+#if 1
+    //for testing the sw status
+    if( mUsermode == USER_MODE_SLAVER)
+        startSlaveMode(mSwMode==0?1:0);
+    return;
+#endif
 
     // mA -> A
     max /= 1000;
@@ -746,6 +831,13 @@ void MainWindow::on_setcurrentButton_clicked()
 
 void MainWindow::on_setVolumeButton_clicked()
 {
+#if 1
+    if( mUsermode == USER_MODE_SLAVER)
+        stopSlaveMode();
+    else
+        startSlaveMode(mSwMode);
+    return;
+#endif
     int max = ui->VolumeMaxlineEdit->text().toInt();
     int min = ui->VolumeMinlineEdit->text().toInt();
     if( max > min){
@@ -1028,18 +1120,25 @@ void MainWindow::startTestVictor()
 
 void MainWindow::on_excelFileSelectpushButton_clicked()
 {
-    QString fileName = QFileDialog::getOpenFileName(this,
-        tr("Open Excel File"), "", tr("Excel Files (*.xlsx)"));
+    //QString fileName = QFileDialog::getOpenFileName(this,tr("Open Excel File"), "", tr("Excel Files (*.xlsx)"));
+
+//    if( fileName.length() > 0 ){
+//        if( mExcel.IsValid())
+//            mExcel.Close();
+//        ui->excelFilePathlineEdit->setText(fileName);
+//        saveRecordToExcel(0,0,0,USER_RES_ERROR_FLAG);
+//    }
+
+    QString fileName = QFileDialog::getOpenFileName(this,tr("Open Txt File"), "", tr("Txt Files (*.txt)"));
 
     if( fileName.length() > 0 ){
-
-        if( mExcel.IsValid())
-            mExcel.Close();
-
+        if(mTxtfile.isOpen()){
+            mTxtfile.close();
+        }
         ui->excelFilePathlineEdit->setText(fileName);
-        saveRecordToExcel(0,0,0,USER_RES_ERROR_FLAG);
+        mTxtfile.setFileName(fileName);
+        saveRecordToTXT(0,0,0,USER_RES_ERROR_FLAG);
     }
-
 
 }
 
@@ -1059,3 +1158,13 @@ void MainWindow::on_excelFileSelectpushButton_clicked()
 
 
 
+void MainWindow::on_setMachineNoButton_clicked()
+{
+
+    Chunk chunk;
+    chunk.append( USER_CMD_SET_MACHINE_NO );
+    chunk.append( (unsigned char*)ui->MachineNolineEdit->text().toLocal8Bit().data(),1 );
+    mMachineName = "";
+    ui->MachineNolineEdit->setText(mMachineName);
+    serial_send_packget( chunk );
+}
