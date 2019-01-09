@@ -11,6 +11,9 @@
 #include "iapmaster.h"
 #include <QTimer>
 #include "qcustomplot.h"
+#include <QTcpSocket>
+#include "serialcoder.h"
+#include <QSettings>
 
 // packget  head tag
 #define USER_DATA_TAG	1
@@ -293,6 +296,10 @@ private slots:
 
     void on_setMachineNoButton_clicked();
 
+    void on_TcpConnectpushButton_clicked();
+
+    void tcpReceivedData();
+    tcpSocketState(QAbstractSocket::SocketState socketState);
 private:
     Ui::MainWindow *ui;
     QSerialPort *mSerialport;
@@ -319,6 +326,12 @@ private:
     int mSwMode;
     int mUsermode;
     QString mMachineName;
+    QTcpSocket *mSocket;
+    volatile bool isTcpConnected;
+    SerialCoder mSerialCoder;
+    bool useNewCoder;
+    QSettings mSetting;
+
 
     void update_serial_info();
     void close_serial();
@@ -340,6 +353,9 @@ private:
     bool sendVictorCmd(char *cmd, int timeoutMs = 0, char *res = __null, int len = 0);
 
     void startTestVictor();
+    void disconnectTCP();
+    void connectTCP();
+
 };
 
 

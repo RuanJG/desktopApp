@@ -5,7 +5,7 @@
 #include "QCloseEvent"
 #include <QDebug>
 #include <QFileDialog>
-
+#include <QHostAddress>
 
 
 MainWindow::MainWindow(QWidget *parent) :
@@ -33,7 +33,12 @@ MainWindow::MainWindow(QWidget *parent) :
     mLogstr(),
     mSwMode(0),
     mUsermode(USER_MODE_ONLINE),
-    mMachineName("")
+    mMachineName(""),
+    mSocket(NULL),
+    isTcpConnected(false),
+    mSerialCoder(),
+    useNewCoder(true),
+    mSetting(qApp->applicationDirPath()+"\/Setting.ini",QSettings::IniFormat)
 
 {
     ui->setupUi(this);
@@ -67,6 +72,15 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->testCountcomboBox->setCurrentIndex(0);
 
     connect( &mtestTimer, SIGNAL(timeout()), SLOT(dataTestEvent()) );
+
+    ui->SerialButton->setEnabled(true);
+    ui->TcpConnectpushButton->setEnabled(true);
+
+    if( mSetting.contains("ip"))
+        ui->IPlineEdit->setText(mSetting.value("ip").toString());
+
+    if( mSetting.contains("port"))
+        ui->PortlineEdit_2->setText(mSetting.value("port").toString());
 
 }
 
@@ -207,12 +221,27 @@ void MainWindow::serial_send_packget( const Chunk &chunk)
 {
     mSerialMutex.lock();
 
-    if( mSerialport != NULL && mSerialport->isOpen()){
-        Chunk pChunk;
-        if ( mEncoder.encode(chunk.getData(),chunk.getSize(),pChunk) ){
-            int count = mSerialport->write( (const char*) pChunk.getData(), pChunk.getSize() );
-            if( count != pChunk.getSize() ){
+    Chunk pChunk;
+    QByteArray msg;
+
+    if( useNewCoder ){
+        msg = mSerialCoder.encode((char*)chunk.getData(),chunk.getSize());
+    }else{
+        if( mEncoder.encode(chunk.getData(),chunk.getSize(),pChunk)){
+            msg = QByteArray((char*)pChunk.getData(),pChunk.getSize());
+        }
+    }
+    if ( msg.size()>0 ){
+        if( mSerialport != NULL && mSerialport->isOpen()){
+            int count = mSerialport->write( msg.data()  , msg.size() );
+            if( count != msg.size()){
                 qDebug() << "serial_send_packget: send data to serial false \n" << endl;
+            }
+        }
+        if( isTcpConnected && mSocket != NULL){
+            int count = mSocket->write(msg.data()  , msg.size());
+            if( count != msg.size() ){
+                qDebug() << "serial_send_packget: send data to TCP false \n" << endl;
             }
         }
     }
@@ -239,10 +268,11 @@ void MainWindow::on_SerialButton_clicked()
         ui->SerialButton->setText(tr("Connect 连接"));
         mMachineName = "";
         ui->MachineNolineEdit->setText(mMachineName);
+        ui->TcpConnectpushButton->setEnabled(true);
     }else{
         if( open_serial() ){
             ui->SerialButton->setText(tr("Disconnect 断开"));
-
+            ui->TcpConnectpushButton->setEnabled(false);
             //to get the config
             Chunk chunk;
             chunk.append( USER_CMD_GET_MAXMIN_TAG );
@@ -272,27 +302,32 @@ void MainWindow::handle_Serial_Data( QByteArray &bytes )
 
     //Iap function
     if( this->isIapStarted() ){
-        this->iapParse( (unsigned char*) bytes.data(), bytes.count());
+        this->iapParse( (unsigned char*) bytes.data(), bytes.size());
         return;
     }
 
+    if( useNewCoder ){
+        bool error;
+        QByteArray msg;
+        for( int i=0; i<bytes.size();i++){
+            msg = mSerialCoder.parse(bytes.at(i),true,&error);
+            if( error ){
+                ui->textBrowser->append("new coder parse error");
+            }
+            if( msg.size() > 0 ){
+                handle_device_message( (unsigned char *)msg.data(), msg.size() );
+            }
+        }
+    }else{
+        mDecoder.decode((unsigned char *)bytes.data(),bytes.size(), packgetList);
+        std::list<Chunk>::iterator iter;
+        for (iter = packgetList.begin(); iter != packgetList.end(); ++iter) {
+            const unsigned char *p = iter->getData();
+            int cnt = iter->getSize();
 
-
-    mDecoder.decode((unsigned char *)bytes.data(),bytes.count(), packgetList);
-
-    //mLogstr += ByteArrayToHexString(bytes);
-    //ui->textBrowser->append("receive: "+ByteArrayToHexString(bytes));
-    //qDebug() << "receive: " << bytes.count() << endl;
-
-    std::list<Chunk>::iterator iter;
-    for (iter = packgetList.begin(); iter != packgetList.end(); ++iter) {
-        const unsigned char *p = iter->getData();
-        int cnt = iter->getSize();
-
-        handle_device_message( p,cnt );
+            handle_device_message( p,cnt );
+        }
     }
-
-
 }
 
 void MainWindow::testSendStartPackget(){
@@ -906,6 +941,13 @@ void MainWindow::iapSendBytes(unsigned char *data, size_t len)
             qDebug() << "iapSendHandler: send data to serial false \n" << endl;
         }
     }
+    if( isTcpConnected && mSocket != NULL){
+        int count = mSocket->write((const char*) data, len);
+        if( count != len){
+            qDebug() << "iapSendHandler: send data to TCP false \n" << endl;
+        }
+    }
+
     mSerialMutex.unlock();
 }
 
@@ -1167,4 +1209,115 @@ void MainWindow::on_setMachineNoButton_clicked()
     mMachineName = "";
     ui->MachineNolineEdit->setText(mMachineName);
     serial_send_packget( chunk );
+}
+
+void MainWindow::on_TcpConnectpushButton_clicked()
+{
+    mSetting.setValue("ip", ui->IPlineEdit->text());
+    mSetting.setValue("port", ui->PortlineEdit_2->text() );
+    mSetting.sync();
+
+    if( mSocket != NULL ){
+        disconnectTCP();
+    }else{
+        connectTCP();
+    }
+}
+
+
+#define log(X) ui->textBrowser->append(X)
+
+void MainWindow::tcpReceivedData()
+{
+    QByteArray buffer;
+
+    buffer = mSocket->readAll();
+
+    //Iap function
+    if( this->isIapStarted() ){
+        this->iapParse( (unsigned char*) buffer.data(), buffer.size());
+        return;
+    }
+
+    handle_Serial_Data(buffer);
+}
+
+
+
+MainWindow::tcpSocketState(QAbstractSocket::SocketState socketState)
+{
+    log("socket status change: "+  socketState);
+    switch(socketState)
+    {
+    case QAbstractSocket::UnconnectedState:
+        log("Unconnected State");
+        if( isTcpConnected ){
+            disconnectTCP();
+        }
+        isTcpConnected = false;
+        ui->SerialButton->setEnabled(true);
+        ui->TcpConnectpushButton->setText(tr("Connect 连接"));
+        break;
+    case QAbstractSocket::HostLookupState:
+        log("HostLookupState");
+        break;
+    case QAbstractSocket::ConnectingState:
+        log("ConnectingState");
+        break;
+    case QAbstractSocket::ConnectedState:
+        log("Connected State");
+        isTcpConnected = true;
+        ui->SerialButton->setEnabled(false);
+        ui->TcpConnectpushButton->setText(tr("Disconnect 断开"));
+        break;
+    case QAbstractSocket::BoundState:
+        log("BoundState");
+        break;
+    case QAbstractSocket::ClosingState:
+        log("ClosingState");
+        break;
+    case QAbstractSocket::ListeningState:
+        log("ListeningState");
+        break;
+    }
+}
+
+void MainWindow::connectTCP()
+{
+    QString ip=ui->IPlineEdit->text();
+    int port = ui->PortlineEdit_2->text().toInt();
+
+    if( isTcpConnected ) return;
+
+    mSocket = new QTcpSocket();
+    connect(mSocket, &QTcpSocket::readyRead, this, tcpReceivedData);
+    //connect(mSocket, &QTcpSocket::disconnected, this, socket_Disconnected);
+    //connect(mSocket, &QTcpSocket::connected, this, socket_Connected);
+    connect(mSocket, &QTcpSocket::stateChanged, this, tcpSocketState);
+
+    QHostAddress addr = QHostAddress(ip);
+    if( addr.toString() == ip){
+        log("connect ip:"+ip);
+        mSocket->connectToHost(QHostAddress(ip) , port);
+    }else{
+        log("connect hostname:"+ip);
+        mSocket->connectToHost(ip,port);
+    }
+
+    log("connecting "+ip+":"+QString::number(port)+"...");
+}
+
+void MainWindow::disconnectTCP()
+{
+    if( isTcpConnected && mSocket != NULL ){
+        isTcpConnected = false;
+        mSocket->disconnectFromHost();
+        disconnect(mSocket, &QTcpSocket::readyRead, this, tcpReceivedData);
+        //disconnect(mSocket, &QTcpSocket::disconnected, this, socket_Disconnected);
+        //disconnect(mSocket, &QTcpSocket::connected, this, socket_Connected);
+        disconnect(mSocket, &QTcpSocket::stateChanged, this, tcpSocketState);
+        mSocket->abort();
+        mSocket->deleteLater();
+        mSocket = NULL;
+    }
 }

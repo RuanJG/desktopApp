@@ -4,7 +4,7 @@
 #
 #-------------------------------------------------
 
-QT       += core gui
+QT       += core gui network
 
 #use serial
 QT      += serialport
@@ -28,7 +28,8 @@ SOURCES += main.cpp\
     util.cpp \
     excelengine.cpp \
     iapmaster.cpp \
-    qcustomplot.cpp
+    qcustomplot.cpp \
+    serialcoder.cpp
 
 HEADERS  += mainwindow.h \
     chunk.h \
@@ -37,7 +38,8 @@ HEADERS  += mainwindow.h \
     coder.h \
     excelengine.h \
     iapmaster.h \
-    qcustomplot.h
+    qcustomplot.h \
+    serialcoder.h
 
 FORMS    += mainwindow.ui
 
