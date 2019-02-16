@@ -34,7 +34,7 @@ QByteArray SerialCoder::parse(const char data ,bool withCRC,bool *error)
 
     if ( pData == PACKET_END )
     {
-        if( mPackget.size() >2 && mStartTag && !mEscTag){
+        if( ((withCRC && mPackget.size()>1) || (!withCRC && mPackget.size()>0))  && mStartTag && !mEscTag){
             if( withCRC ) {
                 unsigned char crc = crc8(mPackget.data(),mPackget.size()-1);
                 if( (unsigned char)mPackget.at(mPackget.size()-1) != crc){

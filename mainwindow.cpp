@@ -38,20 +38,30 @@ MainWindow::MainWindow(QWidget *parent) :
     isTcpConnected(false),
     mSerialCoder(),
     useNewCoder(true),
-    mSetting(qApp->applicationDirPath()+"\/Setting.ini",QSettings::IniFormat)
+    mSetting(qApp->applicationDirPath()+"\/Setting.ini",QSettings::IniFormat),
+    mTestData()
 
 {
     ui->setupUi(this);
-    ui->currentMaxLineEdit->setText(tr("500"));
-    ui->currentMinLineEdit->setText(tr("400"));
-    ui->VolumeMaxlineEdit->setText(tr("65"));
-    ui->VolumeMinlineEdit->setText(tr("20"));
+
+    if( ! mSetting.contains("CurrentMin")){
+        mSetting.setValue("CurrentMin", 350 );
+        mSetting.setValue("CurrentMax", 500 );
+        mSetting.setValue("DBMin", 30 );
+        mSetting.setValue("DBMax", 65 );
+        mSetting.sync();
+    }
+
+    ui->currentMaxLineEdit->setText(mSetting.value("CurrentMax").toString());
+    ui->currentMinLineEdit->setText(mSetting.value("CurrentMin").toString());
+    ui->VolumeMaxlineEdit->setText(mSetting.value("DBMax").toString());
+    ui->VolumeMinlineEdit->setText(mSetting.value("DBMin").toString());
 
     update_serial_info();
 
     on_checkBox_clicked();
 
-    //saveRecordToExcel(0,0,0,USER_RES_ERROR_FLAG);
+
     if( USE_EXECL) ui->excelFilePathlineEdit->setText( mExcel.getFilePath() );
 
     initIap();
@@ -82,6 +92,11 @@ MainWindow::MainWindow(QWidget *parent) :
     if( mSetting.contains("port"))
         ui->PortlineEdit_2->setText(mSetting.value("port").toString());
 
+    ui->pushButton_2->setEnabled(false);
+    ui->pushButton_4->setEnabled(false);
+    ui->pushButton_5->setEnabled(false);
+    ui->checkBox_2->setEnabled(false);
+
 }
 
 MainWindow::~MainWindow()
@@ -102,6 +117,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
 void MainWindow::on_save_close_Button_clicked()
 {
+
     stopIap();
     close_serial();
     //TODO save file
@@ -300,6 +316,8 @@ void MainWindow::handle_Serial_Data( QByteArray &bytes )
     std::list<Chunk> packgetList;
     unsigned char *data;
 
+    //ui->textBrowser->append(bytes.toHex().toUpper());
+
     //Iap function
     if( this->isIapStarted() ){
         this->iapParse( (unsigned char*) bytes.data(), bytes.size());
@@ -364,71 +382,49 @@ void MainWindow::dataTestEvent()
 }
 
 
-void MainWindow::startSlaveMode(int swMode)
+void MainWindow::setUserMode(int mode)
 {
     Chunk chunk;
 
     chunk.append(USER_CMD_CHMOD_TAG);
-    chunk.append(USER_MODE_SLAVER);
+    chunk.append(mode);
     serial_send_packget( chunk );
-    mUsermode = USER_MODE_SLAVER;
-
-    chunk.clear();
-
-    chunk.append(USER_CMD_SET_SW_STATUS_TAG);
-    chunk.append(swMode);
-    serial_send_packget( chunk );
-    mSwMode = swMode;
-
+    mUsermode = mode;
 }
 
-void MainWindow::stopSlaveMode()
+void MainWindow::setSWMode(int mode)
 {
-
     Chunk chunk;
-
     chunk.append(USER_CMD_SET_SW_STATUS_TAG);
-    chunk.append(0);
+    chunk.append(mode);
     serial_send_packget( chunk );
-
-    chunk.clear();
-
-    chunk.append(USER_CMD_CHMOD_TAG);
-    chunk.append(USER_MODE_ONLINE);
-    serial_send_packget( chunk );
-    mUsermode = USER_MODE_ONLINE;
 }
+
 
 void MainWindow::handle_device_message( const unsigned char *data, int len )
 {
     //ui->textBrowser->append(mLogstr);
     //mLogstr="";
+    //QByteArray ba;
+    //ba.setRawData((const char *)data,len);
+    //ui->textBrowser->append(ba.toHex().toUpper());
 
     //head tag
     switch(data[0]){
 
     case USER_DATA_TAG:{
-        //tag[0]+db[0]db[1]db[2]db[3]+current[....]+work_current[0]+error[0]
-        if( len != 11 )
+        //tag[0]+ms[4]+db[4]+current[4]+work_current[0]+error[0]
+        if( len != 15 )
             return;
 
-        int db,count,error;
+        int db,count,error,ms,index,sw;
         float current;
-        memcpy((char*)&db, data+1, 4);
-        memcpy( (char*)&current , data+5 , 4);
-        count = data[9];
-        error = data[10];
-
+        memcpy((char*)&ms, data+1, 4);
+        memcpy( (char*)&db , data+5 , 4);
+        memcpy( (char*)&current , data+9 , 4);
+        index = data[13];
+        sw = data[14];
         current *= 1000; // A->mA
-
-        if( error ==0 && count == 0 ){
-            // this packget is not a result , is the test data in each record
-            currentPlot.append(current);
-            noisePlot.append((float)db);
-            ui->textBrowser->append("db="+QString::number(db) +"db, current="+QString::number(current)+"mA, count=" + QString::number(count) +
-                                     ", error="+ QString::number(error) );
-            return;
-        }
 
         //ack
         Chunk chunk;
@@ -436,13 +432,97 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
         chunk.append( 1 );
         serial_send_packget( chunk );
 
+
+        if( sw == 1 ){
+            if( index == 0){
+                //ui->textBrowser->clear();
+                ui->textBrowser->append("start:");
+                ui->currentlcdNumber->display(0);
+                ui->noiselcdNumber->display(0);
+
+                QPalette pe;
+                pe.setColor(QPalette::WindowText,Qt::black);
+                ui->currentlabel->setPalette(pe);
+                ui->currentlabel->setText("Testing...");
+
+                pe.setColor(QPalette::WindowText,Qt::black);
+                ui->noiselabel->setPalette(pe);
+                ui->noiselabel->setText("Testing...");
+
+                currentPlot.clear();
+                noisePlot.clear();
+                mTestData.clear();
+            }
+            // this packget is not a result , is the test data in each record
+            if( (index+1) <= mTestData.count() ){
+                //repeat data
+                mTestData.set(index,ms,db,current);
+            }else{
+                mTestData.add(ms,db,current);
+                currentPlot.append(current);
+                noisePlot.append((float)db);
+            }
+//            ui->textBrowser->append("data: db="+QString::number(db) +"db, current="+QString::number(current)+"mA, count=" + QString::number(index) +
+//                                     ", switch="+ QString::number(sw) );
+
+            return;
+        }
+
+//        QByteArray ba;
+//        ba.setRawData((const char *)data,len);
+//        ui->textBrowser->append(ba.toHex().toUpper());
+
+        //calcurate
+        int headId = mTestData.findItemAfterMs(2800);
+        int endId = mTestData.findItemBeforeMs(9990);
+        count = endId - headId;
+        error = 0;
+        if( headId == -1 || endId == -1 || count <= 0 )
+        {
+            error |= USER_RES_ERROR_FLAG;
+            db = -1;
+            current = -1;
+            count = 0;
+        }else{
+            db = mTestData.getAverageDB(headId,endId);
+            current = mTestData.getAverageCurrent(headId,endId);
+            if( db < mSetting.value("DBMin").toInt() ||  db >  mSetting.value("DBMax").toInt())
+                error |= USER_RES_VOICE_FALSE_FLAG;
+            if( current < mSetting.value("CurrentMin").toFloat() ||  current >  mSetting.value("CurrentMax").toFloat())
+                error |= USER_RES_CURRENT_FALSE_FLAG;
+        }
+
+        int headId3,count3,error3,db3;
+        float current3;
+        headId3 = mTestData.findItemAfterMs(6800);
+        count3 = endId - headId3;
+        error3 = 0;
+        if( headId3 == -1 || endId == -1 || count3 <= 0 )
+        {
+            error3 |= USER_RES_ERROR_FLAG;
+            db3 = -1;
+            current3 = -1;
+            count3 = 0;
+        }else{
+            db3 = mTestData.getAverageDB(headId3,endId);
+            current3 = mTestData.getAverageCurrent(headId3,endId);
+            if( db3 < mSetting.value("DBMin").toInt() ||  db3 >  mSetting.value("DBMax").toInt())
+                error3 |= USER_RES_VOICE_FALSE_FLAG;
+            if( current3 < mSetting.value("CurrentMin").toFloat() ||  current3 >  mSetting.value("CurrentMax").toFloat())
+                error3 |= USER_RES_CURRENT_FALSE_FLAG;
+        }
+
         //store
-        saveRecordToExcel(db, current, count, error );
+        //use txt instead of execl
+        if( USE_TXT ){
+            saveRecordToTXT(db,current,count,error,db3,current3,count3,error3);
+        }else{
+            saveRecordToExcel(db, current, count, error );
+        }
         displayResult(db, current , error);
 
-
-       ui->textBrowser->append("db="+QString::number(db) +"db, current="+QString::number(current)+"mA, count=" + QString::number(count) +
-                                ", error="+ QString::number(error) );
+       ui->textBrowser->append("result : db="+QString::number(db) +"db, current="+QString::number(current)+"mA, count=" + QString::number(count) +","+QString::number(count3) +
+                                ", error="+ QString::number(error) +", index="+QString::number(index));
 
         break;
     }
@@ -474,6 +554,12 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
                 mTxtfile.setFileName("");
             }
         }
+
+        mSetting.setValue("CurrentMin", cmin*1000 );
+        mSetting.setValue("CurrentMax", cmax*1000 );
+        mSetting.setValue("DBMin", dbmin );
+        mSetting.setValue("DBMax", dbmax );
+        mSetting.sync();
 
         ui->currentMaxLineEdit->setText( QString::number(cmax*1000));
         ui->currentMinLineEdit->setText( QString::number(cmin*1000));
@@ -510,12 +596,13 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
 
         currentPlot.clear();
         noisePlot.clear();
+        mTestData.clear();
 
         break;
     }
 
     default:{
-        ui->textBrowser->append("unknow message!!!");
+        ui->textBrowser->append("unknow message!!!  tag=0x"+QString::number(data[0]));
         break;
     }
 
@@ -566,12 +653,8 @@ void MainWindow::displayResult( int db, float current, int error )
 
 
 
-void MainWindow::saveRecordToTXT(int db, float current, int count, int error)
+void MainWindow::saveRecordToTXT(int db, float current, int count, int error, int db3, float current3, int count3, int error3)
 {
-
-    int intcurrent = current;
-
-
     if( mMachineName.length()==0 ){
         QMessageBox::warning(this,"Error",tr("获取测试机配置内容失败，请断开重连"));
         return;
@@ -600,20 +683,28 @@ void MainWindow::saveRecordToTXT(int db, float current, int count, int error)
         mTxtfile.seek( mTxtfile.size() );
 
         if( mTxtfile.size() ==0 ){
-            //mTxtfile.write("\n\n");
-            mTxtfile.write("Index,Volume(DB),Current(mA),Volume-Fail,Current-Fail\n");
+            mTxtfile.write("Index,Volume(DB[3s-10s]),Current(mA[3s-10s]),Volume-Fail,Current-Fail,Volume(DB[7s-10s]),Current(mA[7s-10s]),Volume-Fail,Current-Fail\n");
+            //mTxtfile.write("Index,Volume(DB[3s-10s]),Current(mA[3s-10s]),DataQty,Volume-Fail,Current-Fail,Volume(DB[7s-10s]),Current(mA[7s-10s]),DataQty,Volume-Fail,Current-Fail\n");
             mExcelTestIndex = 1;
         }
     }
 
 
 
+    //TODO : check count3 and error3 if they are necessary
     if( count == 0 || error & USER_RES_ERROR_FLAG)return;
 
+    int intcurrent = current;
     QString data;
-    data = QString::number(mExcelTestIndex)+","+QString::number(db)+","+QString::number(intcurrent);//+","+"Pass"+"\n";
-    data = data+","+ (error == USER_RES_VOICE_FALSE_FLAG ? "1":"0");
-    data = data+","+ (error == USER_RES_CURRENT_FALSE_FLAG ? "1":"0");
+    data = QString::number(mExcelTestIndex)+","+QString::number(db)+","+QString::number(intcurrent);
+    //data = QString::number(mExcelTestIndex)+","+QString::number(db)+","+QString::number(intcurrent)+","+QString::number(count);
+    data = data+","+ ((error & USER_RES_VOICE_FALSE_FLAG)!=0 ? "1":"0");
+    data = data+","+ ( (error & USER_RES_CURRENT_FALSE_FLAG) != 0 ? "1":"0");
+    intcurrent = current3;
+    data = data+","+ QString::number(db3)+","+QString::number(intcurrent);
+    //data = data+","+ QString::number(db3)+","+QString::number(intcurrent)+","+QString::number(count3);
+    data = data+","+ ((error3 & USER_RES_VOICE_FALSE_FLAG)!=0 ? "1":"0");
+    data = data+","+ ( (error3 & USER_RES_CURRENT_FALSE_FLAG) != 0 ? "1":"0");
     data = data+"\n";
 
     //txtfile.seek( txtfile.size() );
@@ -631,11 +722,6 @@ void MainWindow::saveRecordToExcel(int db, float current, int count, int error)
     int noiseFalse=0;
     int currentFalse = 0;
 
-    //use txt instead of execl
-    if( USE_TXT ){
-        saveRecordToTXT(db,current,count,error);
-        return;
-    }
 
     if( ! mExcel.IsValid() || ! mExcel.IsOpen() ){
 
@@ -838,13 +924,6 @@ void MainWindow::on_setcurrentButton_clicked()
     float max = ui->currentMaxLineEdit->text().toFloat();
     float min = ui->currentMinLineEdit->text().toFloat();
 
-#if 1
-    //for testing the sw status
-    if( mUsermode == USER_MODE_SLAVER)
-        startSlaveMode(mSwMode==0?1:0);
-    return;
-#endif
-
     // mA -> A
     max /= 1000;
     min /= 1000;
@@ -866,13 +945,7 @@ void MainWindow::on_setcurrentButton_clicked()
 
 void MainWindow::on_setVolumeButton_clicked()
 {
-#if 1
-    if( mUsermode == USER_MODE_SLAVER)
-        stopSlaveMode();
-    else
-        startSlaveMode(mSwMode);
-    return;
-#endif
+
     int max = ui->VolumeMaxlineEdit->text().toInt();
     int min = ui->VolumeMinlineEdit->text().toInt();
     if( max > min){
@@ -890,7 +963,6 @@ void MainWindow::on_ClearTextBrowButton_clicked()
 {
     ui->textBrowser->clear();
 
-//    saveRecordToExcel(70,0.41,9,2);
 //    displayResult(60,0.55,0);
 //    currentPlot.append(0.3+(float)(rand()%3)/10 );
 //    noisePlot.append( 55.0+ (float)(rand()%30));
@@ -900,24 +972,24 @@ void MainWindow::on_ClearTextBrowButton_clicked()
 
 void MainWindow::on_restartButton_clicked()
 {
-    if( mExcel.IsValid())
-        mExcel.Close();
+//    if( mExcel.IsValid())
+//        mExcel.Close();
 
-    ui->excelFilePathlineEdit->setText("");
-    saveRecordToExcel(0,0,0,USER_RES_ERROR_FLAG);
-    ui->excelFilePathlineEdit->setText( mExcel.getFilePath() );
+//    ui->excelFilePathlineEdit->setText("");
+//    saveRecordToExcel(0,0,0,USER_RES_ERROR_FLAG);
+//    ui->excelFilePathlineEdit->setText( mExcel.getFilePath() );
 
-    ui->currentlcdNumber->display(0);
-    ui->noiselcdNumber->display(0);
+//    ui->currentlcdNumber->display(0);
+//    ui->noiselcdNumber->display(0);
 
-    QPalette pe;
-    pe.setColor(QPalette::WindowText,Qt::black);
-    ui->currentlabel->setPalette(pe);
-    ui->currentlabel->setText("?");
+//    QPalette pe;
+//    pe.setColor(QPalette::WindowText,Qt::black);
+//    ui->currentlabel->setPalette(pe);
+//    ui->currentlabel->setText("?");
 
-    pe.setColor(QPalette::WindowText,Qt::black);
-    ui->noiselabel->setPalette(pe);
-    ui->noiselabel->setText("?");
+//    pe.setColor(QPalette::WindowText,Qt::black);
+//    ui->noiselabel->setPalette(pe);
+//    ui->noiselabel->setText("?");
 }
 
 
@@ -1171,16 +1243,16 @@ void MainWindow::on_excelFileSelectpushButton_clicked()
 //        saveRecordToExcel(0,0,0,USER_RES_ERROR_FLAG);
 //    }
 
-    QString fileName = QFileDialog::getOpenFileName(this,tr("Open Txt File"), "", tr("Txt Files (*.txt)"));
+//    QString fileName = QFileDialog::getOpenFileName(this,tr("Open Txt File"), "", tr("Txt Files (*.txt)"));
 
-    if( fileName.length() > 0 ){
-        if(mTxtfile.isOpen()){
-            mTxtfile.close();
-        }
-        ui->excelFilePathlineEdit->setText(fileName);
-        mTxtfile.setFileName(fileName);
-        saveRecordToTXT(0,0,0,USER_RES_ERROR_FLAG);
-    }
+//    if( fileName.length() > 0 ){
+//        if(mTxtfile.isOpen()){
+//            mTxtfile.close();
+//        }
+//        ui->excelFilePathlineEdit->setText(fileName);
+//        mTxtfile.setFileName(fileName);
+//        saveRecordToTXT(0,0,0,USER_RES_ERROR_FLAG);
+//    }
 
 }
 
@@ -1319,5 +1391,45 @@ void MainWindow::disconnectTCP()
         mSocket->abort();
         mSocket->deleteLater();
         mSocket = NULL;
+    }
+}
+
+void MainWindow::on_checkBox_2_stateChanged(int arg1)
+{
+    if( ui->checkBox_2->isChecked()){
+        setSWMode(1);
+    }else{
+        setSWMode(0);
+    }
+}
+
+void MainWindow::on_pushButton_4_clicked()
+{
+    setUserMode( USER_MODE_SLAVER );
+}
+
+void MainWindow::on_pushButton_5_clicked()
+{
+    setUserMode( USER_MODE_ONLINE );
+}
+
+void MainWindow::on_pushButton_2_clicked()
+{
+    setUserMode( USER_MODE_OFFLINE );
+}
+
+void MainWindow::on_lineEdit_textChanged(const QString &arg1)
+{
+    if( ui->lineEdit->text() == "a123")
+    {
+        ui->pushButton_2->setEnabled(true);
+        ui->pushButton_4->setEnabled(true);
+        ui->pushButton_5->setEnabled(true);
+        ui->checkBox_2->setEnabled(true);
+    }else{
+        ui->pushButton_2->setEnabled(false);
+        ui->pushButton_4->setEnabled(false);
+        ui->pushButton_5->setEnabled(false);
+        ui->checkBox_2->setEnabled(false);
     }
 }

@@ -244,6 +244,100 @@ public:
 };
 
 
+class TestData{
+
+    typedef struct _testData_t {
+        int ms;
+        int db;
+        float currentmA;
+    }testData_t;
+
+    testData_t mTestData[100];
+    int mIndex ;
+
+public:
+    TestData(){
+        clear();
+    }
+
+    bool add( int ms, int db, float currentmA){
+        if( mIndex >= 100){
+            return false;
+        }
+        mTestData[mIndex].ms = ms;
+        mTestData[mIndex].db = db;
+        mTestData[mIndex].currentmA = currentmA;
+        mIndex++;
+        return true;
+    }
+    bool set( int index, int ms, int db, float currentmA){
+        if( index >= 100){
+            return false;
+        }
+        mTestData[index].ms = ms;
+        mTestData[index].db = db;
+        mTestData[index].currentmA = currentmA;
+        return true;
+    }
+    void clear(){
+        mIndex = 0;
+    }
+    int count()
+    {
+        return mIndex;
+    }
+
+    int findItemAfterMs( int ms )
+    {
+        for( int i=0; i< mIndex; i++){
+            if( mTestData[i].ms >= ms )
+                return i;
+        }
+        return -1;
+    }
+    int findItemBeforeMs( int ms )
+    {
+        for( int i= (mIndex-1); i >= 0; i--){
+            if( mTestData[i].ms <= ms )
+                return i;
+        }
+        return -1;
+    }
+    int getAverageDB( int minId, int maxId )
+    {
+        int db =0,min,max;
+        min = mTestData[minId].db;
+        max = mTestData[minId].db;
+        for( int i= minId; i <= maxId; i++){
+            db += mTestData[i].db;
+            if( min > mTestData[i].db) min = mTestData[i].db;
+            if( max < mTestData[i].db) max = mTestData[i].db;
+        }
+        int count = maxId - minId +1;
+        if( count > 2){
+            return (db-min-max)/(count-2);
+        }else{
+            return db/count;
+        }
+    }
+    float getAverageCurrent( int minId, int maxId )
+    {
+        float current=0,min,max;
+        min = mTestData[minId].currentmA;
+        max = mTestData[minId].currentmA;
+        for( int i= minId; i <= maxId; i++){
+            current += mTestData[i].currentmA;
+            if( min > mTestData[i].currentmA) min = mTestData[i].currentmA;
+            if( max < mTestData[i].currentmA) max = mTestData[i].currentmA;
+        }
+        int count = maxId - minId +1;
+        if( count > 2){
+            return (current-min-max)/(count-2);
+        }else{
+            return current/count;
+        }
+    }
+};
 
 
 class MainWindow : public QMainWindow,IapMaster
@@ -258,10 +352,12 @@ public:
 
     void testSendStartPackget();
     void testSendDataPackget(int db, float current, int count, int error);
-    void saveRecordToTXT(int db, float current, int count, int error);
+    //void saveRecordToTXT(int db, float current, int count, int error);
     QString ByteArrayToHexString(QByteArray data);
-    void startSlaveMode(int swMode);
-    void stopSlaveMode();
+    void startSlaveMode(int mode);
+    void setUserMode(int mode);
+    void setSWMode(int mode);
+    void saveRecordToTXT(int db, float current, int count, int error, int db3, float current3, int count3, int error3);
 private slots:
     void on_save_close_Button_clicked();
 
@@ -300,6 +396,16 @@ private slots:
 
     void tcpReceivedData();
     tcpSocketState(QAbstractSocket::SocketState socketState);
+    void on_checkBox_2_stateChanged(int arg1);
+
+    void on_pushButton_4_clicked();
+
+    void on_pushButton_5_clicked();
+
+    void on_pushButton_2_clicked();
+
+    void on_lineEdit_textChanged(const QString &arg1);
+
 private:
     Ui::MainWindow *ui;
     QSerialPort *mSerialport;
@@ -331,6 +437,8 @@ private:
     SerialCoder mSerialCoder;
     bool useNewCoder;
     QSettings mSetting;
+    TestData mTestData;
+
 
 
     void update_serial_info();
