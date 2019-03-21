@@ -97,6 +97,15 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->pushButton_5->setEnabled(false);
     ui->checkBox_2->setEnabled(false);
 
+    if( !mSetting.contains("startSecond")){
+        mSetting.setValue("startSecond", 3 );
+        mSetting.setValue("stopSecond", 10 );
+        mSetting.sync();
+    }
+    ui->StartSecondspinBox->setValue(mSetting.value("startSecond").toInt());
+    ui->StopSecondspinBox->setValue(mSetting.value("stopSecond").toInt());
+
+
 }
 
 MainWindow::~MainWindow()
@@ -472,9 +481,13 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
 //        ba.setRawData((const char *)data,len);
 //        ui->textBrowser->append(ba.toHex().toUpper());
 
+        int startMs = ui->StartSecondspinBox->value() * 1000;
+        int stopMs = ui->StopSecondspinBox->value() * 1000;
+        ui->textBrowser->append("sample from "+QString::number(startMs)+"ms to "+QString::number(stopMs)+"ms");
+
         //calcurate
-        int headId = mTestData.findItemAfterMs(2800);
-        int endId = mTestData.findItemBeforeMs(9990);
+        int headId = mTestData.findItemAfterMs(startMs-200); //  more earlier 200ms to get more data
+        int endId = mTestData.findItemBeforeMs(stopMs - 10);
         count = endId - headId;
         error = 0;
         if( headId == -1 || endId == -1 || count <= 0 )
@@ -492,8 +505,10 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
                 error |= USER_RES_CURRENT_FALSE_FLAG;
         }
 
+
         int headId3,count3,error3,db3;
         float current3;
+        /*
         headId3 = mTestData.findItemAfterMs(6800);
         count3 = endId - headId3;
         error3 = 0;
@@ -511,6 +526,8 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
             if( current3 < mSetting.value("CurrentMin").toFloat() ||  current3 >  mSetting.value("CurrentMax").toFloat())
                 error3 |= USER_RES_CURRENT_FALSE_FLAG;
         }
+        */
+
 
         //store
         //use txt instead of execl
@@ -683,8 +700,13 @@ void MainWindow::saveRecordToTXT(int db, float current, int count, int error, in
         mTxtfile.seek( mTxtfile.size() );
 
         if( mTxtfile.size() ==0 ){
+            QString timerange = QString::number(ui->StartSecondspinBox->value())+"s-"+QString::number(ui->StopSecondspinBox->value())+"s";
+            QString title = "Index,Volume(DB["+timerange+"]),Current(mA["+timerange+"]),Volume-Fail,Current-Fail\n";
+            mTxtfile.write(title.toLocal8Bit());
+            /*
             mTxtfile.write("Index,Volume(DB[3s-10s]),Current(mA[3s-10s]),Volume-Fail,Current-Fail,Volume(DB[7s-10s]),Current(mA[7s-10s]),Volume-Fail,Current-Fail\n");
             //mTxtfile.write("Index,Volume(DB[3s-10s]),Current(mA[3s-10s]),DataQty,Volume-Fail,Current-Fail,Volume(DB[7s-10s]),Current(mA[7s-10s]),DataQty,Volume-Fail,Current-Fail\n");
+            */
             mExcelTestIndex = 1;
         }
     }
@@ -700,11 +722,15 @@ void MainWindow::saveRecordToTXT(int db, float current, int count, int error, in
     //data = QString::number(mExcelTestIndex)+","+QString::number(db)+","+QString::number(intcurrent)+","+QString::number(count);
     data = data+","+ ((error & USER_RES_VOICE_FALSE_FLAG)!=0 ? "1":"0");
     data = data+","+ ( (error & USER_RES_CURRENT_FALSE_FLAG) != 0 ? "1":"0");
+
+    /*
     intcurrent = current3;
     data = data+","+ QString::number(db3)+","+QString::number(intcurrent);
     //data = data+","+ QString::number(db3)+","+QString::number(intcurrent)+","+QString::number(count3);
     data = data+","+ ((error3 & USER_RES_VOICE_FALSE_FLAG)!=0 ? "1":"0");
     data = data+","+ ( (error3 & USER_RES_CURRENT_FALSE_FLAG) != 0 ? "1":"0");
+    */
+
     data = data+"\n";
 
     //txtfile.seek( txtfile.size() );
@@ -1432,4 +1458,16 @@ void MainWindow::on_lineEdit_textChanged(const QString &arg1)
         ui->pushButton_5->setEnabled(false);
         ui->checkBox_2->setEnabled(false);
     }
+}
+
+void MainWindow::on_StartSecondspinBox_valueChanged(int arg1)
+{
+    mSetting.setValue("startSecond", arg1 );
+    mSetting.sync();
+}
+
+void MainWindow::on_StopSecondspinBox_valueChanged(int arg1)
+{
+    mSetting.setValue("stopSecond", arg1 );
+    mSetting.sync();
 }

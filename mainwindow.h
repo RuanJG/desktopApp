@@ -406,6 +406,10 @@ private slots:
 
     void on_lineEdit_textChanged(const QString &arg1);
 
+    void on_StartSecondspinBox_valueChanged(int arg1);
+
+    void on_StopSecondspinBox_valueChanged(int arg1);
+
 private:
     Ui::MainWindow *ui;
     QSerialPort *mSerialport;
