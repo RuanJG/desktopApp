@@ -106,6 +106,9 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->StopSecondspinBox->setValue(mSetting.value("stopSecond").toInt());
 
 
+    //set the setting widget into disable state
+    on_lineEdit_textChanged("");
+
 }
 
 MainWindow::~MainWindow()
@@ -426,14 +429,16 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
         if( len != 15 )
             return;
 
-        int db,count,error,ms,index,sw;
+        int db,count,error,ms,index,sw,adc;
         float current;
         memcpy((char*)&ms, data+1, 4);
-        memcpy( (char*)&db , data+5 , 4);
+        memcpy( (char*)&adc , data+5 , 4);
         memcpy( (char*)&current , data+9 , 4);
         index = data[13];
         sw = data[14];
         current *= 1000; // A->mA
+        float factor =ui->VolumeFactorlineEdit_2->text().toFloat();
+        db = adc * factor;
 
         //ack
         Chunk chunk;
@@ -546,12 +551,12 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
 
 
     case USER_CONFIG_TAG:{
-        //tag[0]+config_valide[1]+currentmax(A) + currentmin(A) + dbmax + dbmin + machine no
-        if( len != 19 )
+        //tag[0]+config_valide[1]+currentmax(A) + currentmin(A) + dbmax + dbmin + machine no + factor ( float )
+        if( len != 23 )
             return;
 
         int dbmin,dbmax;
-        float cmax,cmin;
+        float cmax,cmin,factor;
 
         if( data[1] != 1){
             ui->textBrowser->append("get an error config");
@@ -562,6 +567,8 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
         memcpy((char*)&dbmax, data+10, 4);
         memcpy((char*)&dbmin , data+14 , 4);
         mMachineName = QString::fromLocal8Bit( (char*)&data[18] ,1);
+        memcpy((char*)&factor , data+19 , 4);
+
         ui->MachineNolineEdit->setText(mMachineName);
         if( mTxtfile.isOpen()){
             QString filename = "T-REX-Test-"+mMachineName;
@@ -582,6 +589,7 @@ void MainWindow::handle_device_message( const unsigned char *data, int len )
         ui->currentMinLineEdit->setText( QString::number(cmin*1000));
         ui->VolumeMaxlineEdit->setText( QString::number(dbmax) );
         ui->VolumeMinlineEdit->setText( QString::number(dbmin) );
+        ui->VolumeFactorlineEdit_2->setText( QString::number(factor) );
 
         currentPlot.changeRange(cmin*1000,cmax*1000);
         noisePlot.changeRange( dbmin, dbmax);
@@ -974,12 +982,15 @@ void MainWindow::on_setVolumeButton_clicked()
 
     int max = ui->VolumeMaxlineEdit->text().toInt();
     int min = ui->VolumeMinlineEdit->text().toInt();
+    float factor = ui->VolumeFactorlineEdit_2->text().toFloat();
+
     if( max > min){
         //send to device
         Chunk chunk;
         chunk.append( USER_CMD_VOICE_MAXMIN_TAG );
         chunk.append( (const unsigned char *)&max, 4);
         chunk.append( (const unsigned char *)&min, 4);
+        chunk.append( (const unsigned char *)&factor, 4);
         serial_send_packget( chunk );
         noisePlot.changeRange(min,max);
     }
@@ -1452,11 +1463,33 @@ void MainWindow::on_lineEdit_textChanged(const QString &arg1)
         ui->pushButton_4->setEnabled(true);
         ui->pushButton_5->setEnabled(true);
         ui->checkBox_2->setEnabled(true);
+        ui->VolumeFactorlineEdit_2->setEnabled(true);
+        ui->VolumeMaxlineEdit->setEnabled(true);
+        ui->VolumeMinlineEdit->setEnabled(true);
+        ui->currentMaxLineEdit->setEnabled(true);
+        ui->currentMinLineEdit->setEnabled(true);
+        ui->MachineNolineEdit->setEnabled(true);
+        ui->StartSecondspinBox->setEnabled(true);
+        ui->StopSecondspinBox->setEnabled(true);
+        ui->setcurrentButton->setEnabled(true);
+        ui->setMachineNoButton->setEnabled(true);
+        ui->setVolumeButton->setEnabled(true);
     }else{
         ui->pushButton_2->setEnabled(false);
         ui->pushButton_4->setEnabled(false);
         ui->pushButton_5->setEnabled(false);
         ui->checkBox_2->setEnabled(false);
+        ui->VolumeFactorlineEdit_2->setEnabled(false);
+        ui->VolumeMaxlineEdit->setEnabled(false);
+        ui->VolumeMinlineEdit->setEnabled(false);
+        ui->currentMaxLineEdit->setEnabled(false);
+        ui->currentMinLineEdit->setEnabled(false);
+        ui->MachineNolineEdit->setEnabled(false);
+        ui->StartSecondspinBox->setEnabled(false);
+        ui->StopSecondspinBox->setEnabled(false);
+        ui->setcurrentButton->setEnabled(false);
+        ui->setMachineNoButton->setEnabled(false);
+        ui->setVolumeButton->setEnabled(false);
     }
 }
 
