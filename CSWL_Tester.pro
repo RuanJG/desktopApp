@@ -17,12 +17,14 @@ SOURCES += main.cpp\
     libs/chunk.cpp \
     libs/iapmaster.cpp \
     libs/uartcoder.cpp \
-    libs/util.cpp
+    libs/util.cpp \
+    testerthread.cpp
 
 HEADERS  += mainwindow.h \
     libs/chunk.h \
     libs/iapmaster.h \
     libs/uartcoder.h \
-    libs/util.h
+    libs/util.h \
+    testerthread.h
 
 FORMS    += mainwindow.ui

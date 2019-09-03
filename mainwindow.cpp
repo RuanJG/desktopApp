@@ -1,5 +1,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+#include <QMessageBox>
+#include "qmetatype.h"
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -11,57 +13,108 @@ MainWindow::MainWindow(QWidget *parent) :
     mEncoder(),
     mTimer(),
     mRelayStatus(0),
-    QRcodeBytes()
+    QRcodeBytes(),
+    mTesterThread(NULL),
+    mQRcode(),
+    mTxtfile()
 {
     ui->setupUi(this);
     update_serial_info();
+
+    mTesterThread = new TesterThread();
+    connect(mTesterThread, SIGNAL(error(QString)), this, SLOT(testerThread_error(QString)));
+    connect(mTesterThread, SIGNAL(log(QString)), this, SLOT(testerThread_log(QString)));
+    connect(mTesterThread, SIGNAL(result(TesterRecord)), this, SLOT(testerThread_result(TesterRecord)));
+    connect(mTesterThread, SIGNAL(sendSerialCmd(int,unsigned char*,int)), this, SLOT(testerThread_sendSerialCmd(int,unsigned char*,int)));
+    connect(this,SIGNAL(testThread_exit()),mTesterThread, SLOT(testThread_exit()) );
+    connect(this,SIGNAL(testThread_start(bool)),mTesterThread, SLOT(testThread_start(bool)) );
+    connect(this,SIGNAL(debug_step(bool)),mTesterThread, SLOT(debug_step(bool)) );
+    connect(this,SIGNAL(update_tester_data(int,unsigned char*)),mTesterThread, SLOT(update_data(int,unsigned char*)));
+    mTesterThread->start();
+
+    ui->ErrorcodepushButton->setText(" ");
+    ui->ErrorcodepushButton->setStyleSheet("color: red");
+    //ui->ErrorcodepushButton->setStyleSheet("background: rgb(0,255,0)");
+    ui->testResultpushButton_2->setText(tr("待测"));
+    ui->testResultpushButton_2->setStyleSheet("color: black");
+
+    QDir mdir;
+    QString filedirPath = QDir::currentPath()+"/reports";
+    QString filename =QDir::toNativeSeparators( filedirPath+"/"+"CSWL_Tester_Data.txt" );
+    mdir.mkpath(filedirPath);
+
+    mTxtfile.setFileName(filename);
+    if( !mTxtfile.open(QIODevice::ReadWrite | QIODevice::Text) ){
+        ui->consoleTextBrowser->append("file open false\n");
+        QMessageBox::warning(this,"Error",tr("打开数据文档失败"));
+        return;
+    }
+
+    mTxtfile.seek( mTxtfile.size() );
+
+    if( mTxtfile.size() ==0 ){
+        QString title = "Date,QRcode,ErrorCode,VDD";
+        title = title+",VLED_100";
+        title = title+",VLED_50";
+        title = title+",Rload_current(A)";
+        title = title+",LED_Animation";
+        for( int i=1; i<=12; i++ ) title = title+",LED"+QString::number(i)+"_100";
+        for( int i=1; i<=12; i++ ) title = title+",LED"+QString::number(i)+"_50";
+        title = title+"\r";
+        mTxtfile.write(title.toLocal8Bit());
+        mTxtfile.flush();
+    }
 }
 
 MainWindow::~MainWindow()
 {
     delete ui;
-}
-void MainWindow::on_serialconnectPushButton_clicked()
-{
-    if( mSerialport != NULL || mScanerserialport != NULL){
-       close_serial();
-       ui->serialconnectPushButton->setText(tr("连接"));
-    }else{
-        if( open_serial() )
-            ui->serialconnectPushButton->setText(tr("断开"));
+
+    if(mTesterThread != NULL){
+        emit testThread_exit();
+        QThread::msleep(100);
     }
+    disconnect(mTesterThread, SIGNAL(error(QString)), this, SLOT(testerThread_error(QString)));
+    disconnect(mTesterThread, SIGNAL(log(QString)), this, SLOT(testerThread_log(QString)));
+    disconnect(mTesterThread, SIGNAL(result(TesterRecord)), this, SLOT(testerThread_result(TesterRecord)));
+    disconnect(mTesterThread, SIGNAL(sendSerialCmd(int,unsigned char*,int)), this, SLOT(testerThread_sendSerialCmd(int,unsigned char*,int)));
+    disconnect(this,SIGNAL(testThread_exit()),mTesterThread, SLOT(testThread_exit()) );
+    disconnect(this,SIGNAL(testThread_start(bool)),mTesterThread, SLOT(testThread_start(bool)) );
+    disconnect(this,SIGNAL(debug_step(bool)),mTesterThread, SLOT(debug_step(bool)) );
+    disconnect(this,SIGNAL(update_tester_data(int,unsigned char*)),mTesterThread, SLOT(update_data(int,unsigned char*)));
+    delete mTesterThread;
+
 }
-void MainWindow::on_serialrescanPushButton_2_clicked()
-{
-    update_serial_info();
-}
-
-
-
-
 
 
 
 
 void MainWindow::update_serial_info()
 {
+    int serialIndex = 0;
+    int scanerIndex = 0;
+
     ui->serialComboBox->clear();
     ui->scanerSerialcomboBox->clear();
 
+    ui->serialComboBox->addItem(tr("无"));
+    ui->scanerSerialcomboBox->addItem(tr("无"));
+    serialIndex = 0;
+    scanerIndex = 0;
+
     QList<QSerialPortInfo> serialPortInfoList = QSerialPortInfo::availablePorts();
-
-
     foreach (const QSerialPortInfo &serialPortInfo, serialPortInfoList) {
         if( serialPortInfo.portName() != NULL){
             ui->serialComboBox->addItem(serialPortInfo.portName());
             ui->scanerSerialcomboBox->addItem(serialPortInfo.portName());
+
+            if( serialPortInfo.vendorIdentifier() == 0x27DD){
+                scanerIndex = ui->scanerSerialcomboBox->count()-1;
+            }
+            if( serialPortInfo.vendorIdentifier() == 0x067B){
+                serialIndex = ui->serialComboBox->count()-1;
+            }
         }
-
-#if 0
-        if( serialPortInfo.description() == "Prolific USB-to-Serial Comm Port")
-            ui->serialComboBox->setCurrentIndex( ui->serialComboBox->count()-1);
-#endif
-
 #if 0
        qDebug() << endl
             << QObject::tr("Port: ") << serialPortInfo.portName() << endl
@@ -74,8 +127,10 @@ void MainWindow::update_serial_info()
 #endif
     }
 
-    ui->serialComboBox->addItem(tr("空白"));
-    ui->scanerSerialcomboBox->addItem(tr("空白"));
+    ui->serialComboBox->setCurrentIndex(serialIndex);
+    ui->scanerSerialcomboBox->setCurrentIndex(scanerIndex);
+
+    if( serialIndex != 0 && scanerIndex!= 0) on_serialconnectPushButton_clicked();
 }
 
 bool MainWindow::open_serial()
@@ -88,7 +143,7 @@ bool MainWindow::open_serial()
     mSerialMutex.lock();
 
     bool res,res2;
-    if( boardSerial != tr("空白") ){
+    if( boardSerial != tr("无") ){
         mSerialport = new QSerialPort();
         mSerialport->setPortName(boardSerial);
         mSerialport->setBaudRate(QSerialPort::Baud115200,QSerialPort::AllDirections);
@@ -101,7 +156,7 @@ bool MainWindow::open_serial()
     }
 
 
-    if( scanerSerial != tr("空白") && scanerSerial != boardSerial ){
+    if( scanerSerial != tr("无") && scanerSerial != boardSerial ){
         mScanerserialport = new QSerialPort();
         mScanerserialport->setPortName(scanerSerial);
         mScanerserialport->setBaudRate(QSerialPort::Baud9600,QSerialPort::AllDirections);
@@ -141,6 +196,8 @@ bool MainWindow::open_serial()
 void MainWindow::close_serial()
 {
     if( mSerialport != NULL){
+        setAlloff();
+        QThread::msleep(100);
         mSerialMutex.lock();
         if( mSerialport->isOpen() )
             mSerialport->close();
@@ -183,10 +240,15 @@ void MainWindow::solt_mScanerSerial_ReadReady()
     //mSerialMutex.unlock();
 
     QRcodeBytes.append(arr);
-    if( 0 <= QRcodeBytes.indexOf('\n') || 0 <= QRcodeBytes.indexOf('\r') ){
-        QString log = QString::fromLocal8Bit(QRcodeBytes);
-        ui->consoleTextBrowser->append("QR Code :"+log);
+    int index = QRcodeBytes.indexOf('\n');
+    int index2 = QRcodeBytes.indexOf('\r');
+    if( 0 < index && 0 < index2 ){
+        QByteArray arr1 = QRcodeBytes.remove(index,1);
+        mQRcode = QString::fromLocal8Bit(arr1.remove(index2,1));
+        ui->consoleTextBrowser->append("QR Code :"+mQRcode);
         QRcodeBytes.clear();
+
+        emit update_tester_data(PC_TAG_DATA_QRCODE, (unsigned char*)mQRcode.toLocal8Bit().data());
     }
 
 }
@@ -215,24 +277,47 @@ void MainWindow::handle_Serial_Data( QByteArray &bytes )
                 if( cnt != 48){
                     ui->consoleTextBrowser->append("LED data error");
                 }else{
-                    unsigned int led_brighness[12];
-                    unsigned char *pd = (unsigned char*)led_brighness;
+                    unsigned char *pd = (unsigned char*)mLedBrightness;
                     for(int i=0 ;i<48;i++){
                         pd[i] = data[i];
                     }
-                    ui->led1lineEdit->setText(QString::number(led_brighness[0]));
-                    ui->led2lineEdit->setText(QString::number(led_brighness[1]));
-                    ui->led3lineEdit->setText(QString::number(led_brighness[2]));
-                    ui->led4lineEdit->setText(QString::number(led_brighness[3]));
-                    ui->led5lineEdit->setText(QString::number(led_brighness[4]));
-                    ui->led6lineEdit->setText(QString::number(led_brighness[5]));
-                    ui->led7lineEdit->setText(QString::number(led_brighness[6]));
-                    ui->led8lineEdit->setText(QString::number(led_brighness[7]));
-                    ui->led9lineEdit->setText(QString::number(led_brighness[8]));
-                    ui->led10lineEdit->setText(QString::number(led_brighness[9]));
-                    ui->led11lineEdit->setText(QString::number(led_brighness[10]));
-                    ui->led12lineEdit->setText(QString::number(led_brighness[11]));
+                    emit update_tester_data(tag, pd);
+
+                    ui->led1lineEdit->setText(QString::number(mLedBrightness[0]));
+                    ui->led2lineEdit->setText(QString::number(mLedBrightness[1]));
+                    ui->led3lineEdit->setText(QString::number(mLedBrightness[2]));
+                    ui->led4lineEdit->setText(QString::number(mLedBrightness[3]));
+                    ui->led5lineEdit->setText(QString::number(mLedBrightness[4]));
+                    ui->led6lineEdit->setText(QString::number(mLedBrightness[5]));
+                    ui->led7lineEdit->setText(QString::number(mLedBrightness[6]));
+                    ui->led8lineEdit->setText(QString::number(mLedBrightness[7]));
+                    ui->led9lineEdit->setText(QString::number(mLedBrightness[8]));
+                    ui->led10lineEdit->setText(QString::number(mLedBrightness[9]));
+                    ui->led11lineEdit->setText(QString::number(mLedBrightness[10]));
+                    ui->led12lineEdit->setText(QString::number(mLedBrightness[11]));
                }
+            }else if(tag == PC_TAG_DATA_VMETER){
+                if( cnt == 4){
+                    float Vol;
+                    memcpy( (char*)&Vol , data , 4);
+                    emit update_tester_data(tag, (unsigned char*)&Vol);
+
+                    if( ui->measureLEDcheckBox_7->isChecked()){
+                        ui->VledlineEdit_14->setText(QString::number(Vol,'f',4));
+                    }else if( ui->meausureVDDcheckBox_6->isChecked()){
+                        ui->VddlineEdit_13->setText(QString::number(Vol,'f',4));
+                    }else{
+                        ui->consoleTextBrowser->append("Vmeter:"+QString::number(Vol,'f',4)+"V");
+                    }
+                }else{
+                    ui->consoleTextBrowser->append("Vmeter data error");
+                }
+            }else if(tag == PC_TAG_DATA_BUTTON){
+                if( cnt==1 && data[0]==1){
+                    on_startTestpushButton_clicked();
+                }else{
+                    ui->consoleTextBrowser->append("Start Button data");
+                }
             }else{
                 QString log = QString::fromLocal8Bit( QByteArray((const char*)data, cnt).toHex() );
                 ui->consoleTextBrowser->append("Data(0x"+QByteArray(&tag,1).toHex()+"):  "+log);
@@ -279,6 +364,115 @@ void MainWindow::scaner_send_cmd( unsigned char *data, int len)
     }
 
     //mSerialMutex.unlock();
+}
+
+
+void MainWindow::sendcmd(int tag, int data)
+{
+    Chunk chunk;
+    chunk.append(tag);
+    chunk.append(data);
+    serial_send_packget(chunk);
+}
+
+
+
+
+
+
+
+
+
+void MainWindow::testerThread_sendSerialCmd(int id, unsigned char* data, int len)
+{
+    if( id == TesterThread::BORAD_ID ){
+        Chunk chunk;
+        chunk.append(data,len);
+        serial_send_packget(chunk);
+    }else if( id == TesterThread::SCANER_ID){
+        scaner_send_cmd(data,len);
+    }else{
+        ui->consoleTextBrowser->append("Error: testerThread_sendSerialCmd: Unknow cmd send to ");
+    }
+}
+void MainWindow::testerThread_log(QString str)
+{
+    ui->autoTesterConsoletextBrowser->append(str);
+}
+void MainWindow::testerThread_result(TesterRecord res)
+{
+    if( res.errorCode == TesterThread::ERRORCODE::E0 ){
+        ui->ErrorcodepushButton->setText(" ");
+        ui->testResultpushButton_2->setText(tr("测试通过"));
+        ui->testResultpushButton_2->setStyleSheet("color: green");
+    }else{
+        ui->ErrorcodepushButton->setText("E"+QString::number(res.errorCode));
+        ui->testResultpushButton_2->setText(tr("测试失败"));
+        ui->testResultpushButton_2->setStyleSheet("color: red");
+    }
+    if( mTxtfile.isOpen() ){
+        QString record;
+        record = record+res.date+",";
+        record = record+res.QRcode+",";
+        record = record+"E"+QString::number(res.errorCode)+",";
+        record = record+QString::number(res.VDD,'f',4)+",";
+        record = record+QString::number(res.VLedFull,'f',4)+",";
+        record = record+QString::number(res.VLedMid,'f',4)+",";
+        record = record+QString::number(res.RloadCurrent,'f',4)+",";
+        record = record+(res.LedAnimation?"OK":"NG")+",";
+        for( int i=0; i<12; i++ ){
+            record = record+QString::number(res.LedFullLevel[i])+",";
+        }
+        for( int i=0; i<12; i++ ){
+            record = record+QString::number(res.LedMidLevel[i])+",";
+        }
+        record = record+"\r";
+        mTxtfile.write(record.toLocal8Bit());
+        mTxtfile.flush();
+    }
+    ui->autoTesterConsoletextBrowser->append("Tester Result : E"+QString::number(res.errorCode));
+
+    ui->startTestpushButton->setText(tr("开始"));
+}
+void MainWindow::testerThread_error(QString errorStr)
+{
+    ui->ErrorcodepushButton->setText(" ");
+    ui->testResultpushButton_2->setText(tr("测试错误"));
+    ui->testResultpushButton_2->setStyleSheet("color: red");
+    ui->autoTesterConsoletextBrowser->append("Tester Error: "+errorStr);
+    QMessageBox::warning(this,tr("测试错误"),errorStr);
+    ui->startTestpushButton->setText(tr("开始"));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void MainWindow::on_serialconnectPushButton_clicked()
+{
+    if( mSerialport != NULL || mScanerserialport != NULL){
+       close_serial();
+       ui->serialconnectPushButton->setText(tr("连接"));
+    }else{
+        if( open_serial() )
+            ui->serialconnectPushButton->setText(tr("断开"));
+    }
+}
+
+void MainWindow::on_serialrescanPushButton_2_clicked()
+{
+    update_serial_info();
 }
 
 
@@ -376,14 +570,18 @@ void MainWindow::on_outputtoVmetercheckBox_4_clicked(bool checked)
     if( checked ){
         ui->measuretoVmetercheckBox_5->setChecked(false);
         ui->measuretoVmetercheckBox_5->clicked(false);
-        data = mRelayStatus | 0x8;
+        //data = mRelayStatus | 0x8;
+        setConnectOutVmeter();
+        //sendcmd(PC_TAG_CMD_SWITCH,0x38);
         ui->consoleTextBrowser->append("Output to Meter on");
     }else{
-        data = mRelayStatus & (~0x8);
+        //data = mRelayStatus & (~0x8);
+        //sendcmd(PC_TAG_CMD_SWITCH,0x30);
+        setDisconnectOutVmeter();
         ui->consoleTextBrowser->append("Output to Meter off");
     }
-    mRelayStatus = data;
-    serial_send_PMSG(PC_TAG_CMD_SWITCH, &data, 1);
+    //mRelayStatus = data;
+    //serial_send_PMSG(PC_TAG_CMD_SWITCH, &data, 1);
 }
 
 void MainWindow::on_airpresscheckBox_clicked(bool checked)
@@ -417,7 +615,18 @@ void MainWindow::on_measuretoVmetercheckBox_5_clicked(bool checked)
 }
 
 
-
+void MainWindow::on_VmeterStartcheckBox_clicked(bool checked)
+{
+    unsigned char data;
+    if( checked ){
+        data = 0x01;
+        ui->consoleTextBrowser->append("Vmeter On");
+    }else{
+        data = 0x00;
+        ui->consoleTextBrowser->append("Vmeter Off");
+    }
+    serial_send_PMSG(PC_TAG_CMD_VMETER_READ, &data, 1);
+}
 
 
 void MainWindow::on_meausureVDDcheckBox_6_clicked(bool checked)
@@ -472,4 +681,44 @@ void MainWindow::on_scanerStartpushButton_clicked()
 {
     unsigned char cmd[3] = {0x16,0x54,0x0D};
     scaner_send_cmd(cmd,sizeof(cmd));
+}
+
+
+
+void MainWindow::on_DebugpushButton_clicked()
+{
+    emit debug_step(true);
+}
+
+void MainWindow::on_startTestpushButton_clicked()
+{
+    if( mTesterThread->mStartTest ){
+        ui->ErrorcodepushButton->setText(" ");
+        ui->testResultpushButton_2->setText(tr("中止测试"));
+        ui->testResultpushButton_2->setStyleSheet("color: black");
+        emit testThread_start(false);
+        ui->startTestpushButton->setText(tr("开始"));
+    }else{
+        ui->ErrorcodepushButton->setText(" ");
+        ui->testResultpushButton_2->setText(tr("测试中..."));
+        ui->testResultpushButton_2->setStyleSheet("color: black");
+        emit testThread_start(true);
+        ui->startTestpushButton->setText(tr("中止"));
+    }
+
+}
+
+void MainWindow::on_AutoTestClearLogpushButton_clicked()
+{
+    ui->autoTesterConsoletextBrowser->clear();
+}
+
+void MainWindow::on_ClearLogpushButton_2_clicked()
+{
+    ui->consoleTextBrowser->clear();
+}
+
+void MainWindow::on_debugModeCheckBox_clicked(bool checked)
+{
+    mTesterThread->mDebugMode = checked;
 }
