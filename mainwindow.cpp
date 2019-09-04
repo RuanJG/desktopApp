@@ -64,6 +64,13 @@ MainWindow::MainWindow(QWidget *parent) :
         mTxtfile.write(title.toLocal8Bit());
         mTxtfile.flush();
     }
+
+    mTesterLedBrightness_cnt = 0;
+    mTesterMeterValue_cnt = 0;
+    mTesterMeterValue = 0;
+    for( int i=0 ;i<12; i++){
+        mTesterLedBrightness[i] = 0;
+    }
 }
 
 MainWindow::~MainWindow()
@@ -281,8 +288,24 @@ void MainWindow::handle_Serial_Data( QByteArray &bytes )
                     for(int i=0 ;i<48;i++){
                         pd[i] = data[i];
                     }
+#if 0
+                    for( int j=0; j< 12; j++){
+                        mTesterLedBrightness[j] += mLedBrightness[j];
+                    }
+                    mTesterLedBrightness_cnt++;
+                    if( mTesterLedBrightness_cnt >= mTesterThread->LedBrightness_update_mean_cnt){
+                        for( int j=0; j< 12; j++){
+                            mTesterLedBrightness[j] /= mTesterLedBrightness_cnt;
+                            mTesterThread->LedBrightness[j] = mTesterLedBrightness[j];
+                            mTesterLedBrightness[j] = 0;
+                        }
+                        mTesterThread->LedBrightness_update = true;
+                        //emit update_tester_data(tag, (unsigned char*)mTesterLedBrightness);
+                        mTesterLedBrightness_cnt = 0;
+                    }
+#else
                     emit update_tester_data(tag, pd);
-
+#endif
                     ui->led1lineEdit->setText(QString::number(mLedBrightness[0]));
                     ui->led2lineEdit->setText(QString::number(mLedBrightness[1]));
                     ui->led3lineEdit->setText(QString::number(mLedBrightness[2]));
@@ -300,12 +323,26 @@ void MainWindow::handle_Serial_Data( QByteArray &bytes )
                 if( cnt == 4){
                     float Vol;
                     memcpy( (char*)&Vol , data , 4);
+#if 0
+                    mTesterMeterValue += Vol;
+                    mTesterMeterValue_cnt++;
+                    if( mTesterMeterValue_cnt >= mTesterThread->VMeter_update_mean_cnt ){
+                        mTesterMeterValue /=  mTesterMeterValue_cnt;
+                        //emit update_tester_data(tag, (unsigned char*)&mTesterMeterValue);
+                        mTesterThread->VMeter_value = mTesterMeterValue;
+                        mTesterThread->VMeter_update = true;
+                        mTesterMeterValue_cnt = 0;
+                        mTesterMeterValue = 0;
+                    }
+#else
                     emit update_tester_data(tag, (unsigned char*)&Vol);
-
+#endif
                     if( ui->measureLEDcheckBox_7->isChecked()){
                         ui->VledlineEdit_14->setText(QString::number(Vol,'f',4));
                     }else if( ui->meausureVDDcheckBox_6->isChecked()){
                         ui->VddlineEdit_13->setText(QString::number(Vol,'f',4));
+                    }else if( ui->outputtoVmetercheckBox_4->isChecked()){
+                        ui->VRloadled4lineEdit_2->setText(QString::number(Vol,'f',4));
                     }else{
                         ui->consoleTextBrowser->append("Vmeter:"+QString::number(Vol,'f',4)+"V");
                     }
@@ -430,7 +467,9 @@ void MainWindow::testerThread_result(TesterRecord res)
         mTxtfile.write(record.toLocal8Bit());
         mTxtfile.flush();
     }
+
     ui->autoTesterConsoletextBrowser->append("Tester Result : E"+QString::number(res.errorCode));
+    ui->erroecodeStringlabel_24->setText( res.errorCodeString );
 
     ui->startTestpushButton->setText(tr("开始"));
 }
@@ -443,8 +482,6 @@ void MainWindow::testerThread_error(QString errorStr)
     QMessageBox::warning(this,tr("测试错误"),errorStr);
     ui->startTestpushButton->setText(tr("开始"));
 }
-
-
 
 
 

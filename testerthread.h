@@ -5,7 +5,7 @@
 #include <QThread>
 #include "libs/chunk.h"
 #include "QMetaType"
-
+#include <QMutex>
 
 #define PMSG_TAG_IAP		0x00
 #define PMSG_TAG_ACK		0x10
@@ -59,6 +59,7 @@
 class TesterRecord{
 public:
     int errorCode;
+    QString errorCodeString;
     QString date;
     QString QRcode;
     float VDD;
@@ -94,6 +95,7 @@ public:
         E6, //LED mid voltage error
         E7, //Load resistor current error
         E8, //verify LED animation error after shaver connect
+        E9, //ento test3mode error
     }ERRORCODE_t;
 
 
@@ -102,7 +104,11 @@ public:
     volatile bool mStartTest;
     volatile bool mExitcmd;
 
+
+
+
     void checkDebug();
+
 signals:
     void sendSerialCmd(int id, unsigned char* data, int len);
     void log(QString str);
@@ -122,19 +128,32 @@ private:
 
     volatile bool QRcode_update;
     QString QRcode;
-    volatile bool LedBrightness_update;
-    int LedBrightness[12];
-    volatile bool VMeter_update;
-    float VMeter_value;
     volatile int mRelayStatus;
     volatile int mLedAnimationStep;
     volatile int mLedAnimationIndex;
 
 
+    volatile int ledhalfonTimeoutMs;
+    volatile int ledAnimationTimeMs;
 
+    volatile int LedBrightness_update_mean_cnt;
+    volatile bool LedBrightness_update;
+    int LedBrightness[12];
+    volatile int LedBrightness_current_cnt;
+    int LedBrightness_current[12];
+
+    volatile int VMeter_update_mean_cnt;
+    volatile bool VMeter_update;
+    float VMeter_value;
+    volatile int VMeter_current_cnt;
+    float VMeter_value_current;
+
+    QMutex mMutex;
     void sendcmd(int tag, int data);
     void testThread_reset();
     int testLedAnimationLoop();
+    void testThread_clear_data(int led_mean_cnt, int vmeter_mean_cnt);
+
 };
 
 

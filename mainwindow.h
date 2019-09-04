@@ -103,6 +103,10 @@ private:
     QString mQRcode;
     QFile mTxtfile;
 
+    int  mTesterLedBrightness[12];
+    int mTesterLedBrightness_cnt;
+    float mTesterMeterValue;
+    float mTesterMeterValue_cnt;
 
     void update_serial_info();
     bool open_serial();

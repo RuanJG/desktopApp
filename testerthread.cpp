@@ -2,7 +2,7 @@
 #include <QDateTime>
 #include <QDebug>
 
-TesterThread::TesterThread(QObject *parent) : QThread(parent)
+TesterThread::TesterThread(QObject *parent) : QThread(parent),mMutex()
 {
     mExitcmd = false;
     mStartTest = false;
@@ -13,10 +13,30 @@ TesterThread::TesterThread(QObject *parent) : QThread(parent)
 
 void TesterThread::testThread_reset()
 {
-    LedBrightness_update = false;
-    QRcode_update  = false;
-    VMeter_update = false;
     mRelayStatus = 0;
+    testThread_clear_data(1,1);
+}
+
+void TesterThread::testThread_clear_data(int led_mean_cnt, int vmeter_mean_cnt)
+{
+    mMutex.lock();
+
+    QRcode_update  = false;
+
+    LedBrightness_update = false;
+    VMeter_update = false;
+
+
+    LedBrightness_update_mean_cnt = led_mean_cnt;
+    LedBrightness_current_cnt = 0;
+    for( int i=0; i< 12; i++)
+        LedBrightness_current[i]=0;
+
+    VMeter_update_mean_cnt = vmeter_mean_cnt;
+    VMeter_current_cnt = 0;
+    VMeter_value_current = 0;
+
+    mMutex.unlock();
 }
 
 void TesterThread::testThread_start(bool start)
@@ -31,17 +51,46 @@ void TesterThread::testThread_exit()
 
 void TesterThread::update_data(int tag, unsigned char *data)
 {
+    mMutex.lock();
     if( tag == PC_TAG_DATA_LED_BRIGHTNESS ){
         int *pdata = (int*)data;
+#if 0
         for( int i=0; i<12 ; i++) LedBrightness[i]=pdata[i];
         LedBrightness_update = true;
+
+#else
+        LedBrightness_current_cnt++;
+        for( int i=0; i<12 ; i++) {
+            LedBrightness_current[i]+=pdata[i];
+            if( LedBrightness_current_cnt >= LedBrightness_update_mean_cnt ){
+                LedBrightness[i] = LedBrightness_current[i] / LedBrightness_current_cnt;
+                LedBrightness_current[i] = 0;
+            }
+        }
+        if( LedBrightness_current_cnt >= LedBrightness_update_mean_cnt ){
+            LedBrightness_update = true;
+            LedBrightness_current_cnt = 0;
+        }
+#endif
     }else if( tag == PC_TAG_DATA_QRCODE){
         QRcode = QString::fromLocal8Bit((char*)data);
         QRcode_update  = true;
     }else if( tag == PC_TAG_DATA_VMETER){
+#if 0
         VMeter_value = *((float*)data);
         VMeter_update = true;
+#else
+        VMeter_current_cnt++;
+        VMeter_value_current += *((float*)data);
+        if( VMeter_current_cnt >= VMeter_update_mean_cnt){
+            VMeter_value = VMeter_value_current/VMeter_current_cnt;
+            VMeter_value_current = 0;
+            VMeter_current_cnt = 0;
+            VMeter_update = true;
+        }
+#endif
     }
+    mMutex.unlock();
 }
 
 void TesterThread::debug_step(bool start)
@@ -49,6 +98,13 @@ void TesterThread::debug_step(bool start)
     //mDebugMode = start;
     mNextStep = start;
 }
+
+
+
+
+
+
+
 
 
 
@@ -91,8 +147,8 @@ void TesterThread::run()
     volatile int retry = 0;
     volatile int timeoutMs = 0;
     TesterRecord testRes;
-    QString qrcodeExample = "CSWL-B01-S01-19325-000008";
-    bool keepTestEvenNG = true;
+    QString qrcodeExample = "CSWL-9711.1-B01-S01-19325-000008";
+    bool keepTestEvenNG = false;
 
 
 
@@ -101,6 +157,7 @@ void TesterThread::run()
         testRes = TesterRecord();
         testRes.date = QDateTime::currentDateTime().toString("yyyyMMddhhmmss");
         testRes.errorCode = ERRORCODE::E0;
+        testRes.errorCodeString = "";
         mStartTest = false;
         emit log("AutoTest: Standby");
         while( !mStartTest )
@@ -111,6 +168,10 @@ void TesterThread::run()
             msleep(10);
         }
         testThread_reset();
+
+
+
+
 
     //first open all relay and switches
         emit log("AutoTest: 1 close all relay and switches");
@@ -145,6 +206,7 @@ void TesterThread::run()
             emit log("get QRcode: "+ QRcode);
             if( QRcode.length() != qrcodeExample.length() ){
                 testRes.errorCode = ERRORCODE::E1;
+                testRes.errorCodeString = "QRcode error";
             }
             if( testRes.errorCode != ERRORCODE::E0){
                 emit result(testRes);
@@ -177,21 +239,22 @@ void TesterThread::run()
         emit log("AutoTest: 7 Verify Led brighness");
         setLedCaptureStart();
         msleep(100);
-        LedBrightness_update = false;
-        for( retry = 0, timeoutMs = 0;  retry < 3 ; retry++){
-            while(!LedBrightness_update){
-                msleep(10);
-                timeoutMs+=10;
-                if( mExitcmd || !mStartTest ) break;
-                if( timeoutMs >= 1000 ) break;
-            }
-            if( LedBrightness_update )break;
+        //LedBrightness_update_mean_cnt = 10;
+        //LedBrightness_update = false;
+        testThread_clear_data(10,1);
+        timeoutMs = 0;
+        while(!LedBrightness_update){
+            msleep(10);
+            timeoutMs+=10;
+            if( mExitcmd || !mStartTest ) break;
+            if( timeoutMs >= 1000 ) break;
         }
         if( LedBrightness_update ) {
             for( int i=0; i<12; i++ ){
                 //TODO check the level in range;
                 if( LedBrightness[i] < LED_FULL_LOW_LEVEL ){
                     testRes.errorCode = ERRORCODE::E2;
+                    testRes.errorCodeString = "LED"+QString(i+1)+": 100% is too dim";
                 }
                 testRes.LedFullLevel[i] = LedBrightness[i];
             }
@@ -211,21 +274,22 @@ void TesterThread::run()
         emit log("AutoTest: 8 Verify Led Voltage");
         setMeasureLED();
         setConnectMeasureVmeter();
-        msleep(500);
-        VMeter_update = false;
-        for( retry = 0, timeoutMs = 0;  retry < 3 ; retry++){
-            while(!VMeter_update){
-                msleep(10);
-                timeoutMs+=10;
-                if( mExitcmd || !mStartTest ) break;
-                if( timeoutMs >= 1000 ) break;
-            }
-            if( VMeter_update )break;
+        msleep(300);
+        //VMeter_update_mean_cnt = 5;
+        //VMeter_update = false;
+        testThread_clear_data(1,5);
+        timeoutMs = 0;
+        while(!VMeter_update){
+            msleep(10);
+            timeoutMs+=10;
+            if( mExitcmd || !mStartTest ) break;
+            if( timeoutMs >= 2000 ) break;
         }
         if( VMeter_update ){
             testRes.VLedFull = VMeter_value;
             if( VMeter_value > LED_FULL_MAX_V_LEVEL || VMeter_value < LED_FULL_MIN_V_LEVEL){
                 testRes.errorCode = ERRORCODE::E3;
+                testRes.errorCodeString = "VLED_100%="+QString::number(VMeter_value,'f',4)+",is out of range ";
             }
             if( !keepTestEvenNG && testRes.errorCode != ERRORCODE::E0){
                 emit result(testRes);
@@ -245,21 +309,22 @@ void TesterThread::run()
         emit log("AutoTest: 9 Verify VDD");
         setMeasureVDD();
         setConnectMeasureVmeter();
-        msleep(500);
-        VMeter_update = false;
-        for( retry = 0, timeoutMs = 0;  retry < 3 ; retry++){
-            while(!VMeter_update){
-                msleep(10);
-                timeoutMs+=10;
-                if( mExitcmd || !mStartTest ) break;
-                if( timeoutMs >= 1000 ) break;
-            }
-            if( VMeter_update )break;
+        msleep(300);
+        //VMeter_update_mean_cnt = 5;
+        //VMeter_update = false;
+        testThread_clear_data(1,5);
+        timeoutMs = 0;
+        while(!VMeter_update){
+            msleep(10);
+            timeoutMs+=10;
+            if( mExitcmd || !mStartTest ) break;
+            if( timeoutMs >= 2000 ) break;
         }
         if( VMeter_update ){
             testRes.VDD = VMeter_value;
             if( VMeter_value > VDD_MAX_V_LEVEL || VMeter_value < VDD_MIN_V_LEVEL){
                 testRes.errorCode = ERRORCODE::E4;
+                testRes.errorCodeString = "VDD="+QString::number(VMeter_value,'f',4)+",is out of range ";
             }
             if( !keepTestEvenNG && testRes.errorCode != ERRORCODE::E0){
                 emit result(testRes);
@@ -293,15 +358,15 @@ void TesterThread::run()
         emit log("AutoTest: 12 Verify Led Mid brighness");
         setLedCaptureStart();
         msleep(100);
-        LedBrightness_update = false;
-        for( retry = 0, timeoutMs = 0;  retry < 3 ; retry++){
-            while(!LedBrightness_update){
-                msleep(10);
-                timeoutMs+=10;
-                if( mExitcmd || !mStartTest ) break;
-                if( timeoutMs >= 1000 ) break;
-            }
-            if( LedBrightness_update )break;
+        //LedBrightness_update_mean_cnt = 10;
+        //LedBrightness_update = false;
+        testThread_clear_data(10,1);
+        timeoutMs = 0;
+        while(!LedBrightness_update){
+            msleep(10);
+            timeoutMs+=10;
+            if( mExitcmd || !mStartTest ) break;
+            if( timeoutMs >= 1000 ) break;
         }
         if( LedBrightness_update ) {
             for( int i=0; i<12; i++ ){
@@ -309,6 +374,7 @@ void TesterThread::run()
                 testRes.LedMidLevel[i] = LedBrightness[i];
                 if( LedBrightness[i] < LED_MID_LOW_LEVEL || LedBrightness[i] > LED_MID_HIGH_LEVEL ){
                     testRes.errorCode = ERRORCODE::E5;
+                    testRes.errorCodeString = "Brightness of LED"+QString(i+1)+": 30% is not in range";
                 }
             }
             if( !keepTestEvenNG && testRes.errorCode != ERRORCODE::E0){
@@ -328,20 +394,21 @@ void TesterThread::run()
         setMeasureLED();
         setConnectMeasureVmeter();
         msleep(300);
-        VMeter_update = false;
-        for( retry = 0, timeoutMs = 0;  retry < 3 ; retry++){
-            while(!VMeter_update){
-                msleep(10);
-                timeoutMs+=10;
-                if( mExitcmd || !mStartTest ) break;
-                if( timeoutMs >= 1000 ) break;
-            }
-            if( VMeter_update )break;
+        //VMeter_update_mean_cnt = 5;
+        //VMeter_update = false;
+        testThread_clear_data(1,5);
+        timeoutMs = 0;
+        while(!VMeter_update){
+            msleep(10);
+            timeoutMs+=10;
+            if( mExitcmd || !mStartTest ) break;
+            if( timeoutMs >= 2000 ) break;
         }
         if( VMeter_update ){
             testRes.VLedMid = VMeter_value;
             if( VMeter_value > LED_MID_MAX_V_LEVEL || VMeter_value < LED_MID_MIN_V_LEVEL){
                 testRes.errorCode = ERRORCODE::E6;
+                testRes.errorCodeString = "VLED_30%="+QString::number(VMeter_value,'f',4)+",is out of range ";
             }
             if( !keepTestEvenNG && testRes.errorCode != ERRORCODE::E0){
                 emit result(testRes);
@@ -361,6 +428,7 @@ void TesterThread::run()
         setPowerOff();
         msleep(1000);
         checkEven();
+
     //TP306 High->Power on->TP306 LOW
         emit log("AutoTest: 15 Into TP306 mode");
         setNormalMode();
@@ -371,6 +439,59 @@ void TesterThread::run()
         setNormalMode();
         msleep(100);
         checkEven();
+        //Verify Led half on , half off
+        setLedCaptureStart();
+        msleep(100);
+        ledhalfonTimeoutMs = 0;
+        bool ledhalfon = false;
+
+        //LedBrightness_update_mean_cnt = 10;
+        //LedBrightness_update = false;
+        testThread_clear_data(10,1);
+        while( ledhalfonTimeoutMs < 3000)
+        {
+            timeoutMs = 0;
+            while(!LedBrightness_update){
+                msleep(10);
+                timeoutMs+=10;
+                ledhalfonTimeoutMs += 10;
+                if( ledhalfonTimeoutMs > 3000 ) break;
+                if( mExitcmd || !mStartTest ) break;
+                if( timeoutMs >= 2000 ) break;
+            }
+            if( LedBrightness_update ) {
+                int LenonCnt = 0;
+                for( int i=0; i<12; i++ ){
+                    if( LedBrightness[i] >= LED_MID_LOW_LEVEL ){
+                        LenonCnt++;
+                    }
+                }
+                LedBrightness_update = false; //!!!!!
+                if( LenonCnt == 6 ) { ledhalfon = true; break;}
+                if( LenonCnt > 6 ) { ledhalfon = false; emit error("Verify Led harf on Failed");break;}
+            }else{
+                emit error("Verify Led harf on data timeout");
+                ledhalfon = false;
+                break;
+            }
+            if( mExitcmd || !mStartTest ) break;
+        }
+        if( !ledhalfon ){
+            testRes.errorCode = TesterThread::ERRORCODE::E9;
+            testRes.errorCodeString = "In Testmode4 , LED is not half on , half off";
+            if( !keepTestEvenNG ){
+                emit result(testRes);
+                setAlloff();
+                if( ledhalfonTimeoutMs >= 3000 ) emit error("Verify Led harf on timeout");
+                continue;
+            }else{
+                if( ledhalfonTimeoutMs >= 3000 ) emit log("Verify Led harf on timeout");
+            }
+        }else{
+            emit log("Verify Led harf on OK");
+        }
+        setLedCaptureStop();
+        checkEven();
     //Verify RLoad voltage
         emit log("AutoTest: 16 Verify RLoad current");
         setConnectOutVmeter();
@@ -378,21 +499,22 @@ void TesterThread::run()
         setConnectResistor();
         msleep(2000);
         checkEven();
-        VMeter_update = false;
-        for( retry = 0, timeoutMs = 0;  retry < 3 ; retry++){
-            while(!VMeter_update){
-                msleep(10);
-                timeoutMs+=10;
-                if( mExitcmd || !mStartTest ) break;
-                if( timeoutMs >= 1000 ) break;
-            }
-            if( VMeter_update )break;
+        //VMeter_update_mean_cnt = 5;
+        //VMeter_update = false;
+        testThread_clear_data(1,5);
+        timeoutMs = 0;
+        while(!VMeter_update){
+            msleep(10);
+            timeoutMs+=10;
+            if( mExitcmd || !mStartTest ) break;
+            if( timeoutMs >= 2000 ) break;
         }
         if( VMeter_update ){
             testRes.RloadCurrent = VMeter_value/100; // A = V/100R
             emit log("VRload="+QString::number(VMeter_value,'f',6)+"; A="+QString::number(testRes.RloadCurrent,'f',6));
             if( testRes.RloadCurrent > RLOAD_MAX_A_LEVEL || testRes.RloadCurrent < RLOAD_MIN_A_LEVEL){
                 testRes.errorCode = ERRORCODE::E7;
+                testRes.errorCodeString = "Rload current="+QString::number(VMeter_value,'f',4)+",is out of range ";
             }
             if(!keepTestEvenNG &&  testRes.errorCode != ERRORCODE::E0){
                 emit result(testRes);
@@ -420,16 +542,19 @@ void TesterThread::run()
         setPowerOn();
         msleep(500);
         checkEven();
+
     //Verify LED animation
         emit log("AutoTest: 19 Verify LED animation");
         setConnectShaver();
         setLedCaptureStart();
         setVmeterReadStop();
         msleep(100);
-        volatile int ledAnimationTimeMs = 0;
+        ledAnimationTimeMs = 0;
         mLedAnimationStep = 0;
         mLedAnimationIndex = 0;
-        LedBrightness_update = false;
+        //LedBrightness_update_mean_cnt = 4;
+        //LedBrightness_update = false;
+        testThread_clear_data(4,1);
         int res;
         bool checkRes;
 
@@ -447,8 +572,10 @@ void TesterThread::run()
             }
             if( LedBrightness_update ) {
                 res = testLedAnimationLoop();
+                LedBrightness_update = false; //!!!!!
                 if( -1 ==  res){
                     testRes.errorCode = ERRORCODE::E8;
+                    testRes.errorCodeString = "LED Animation detection failed";
                     checkRes = false;
                     break;
                 }
@@ -462,6 +589,7 @@ void TesterThread::run()
                 checkRes = false;
                 break;
             }
+            if( mExitcmd || !mStartTest ) break;
         }
         if( !checkRes ){
             if( ledAnimationTimeMs >= 6000 )
