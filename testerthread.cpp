@@ -130,7 +130,7 @@ void TesterThread::checkDebug()
     }
 }
 
-#define checkEven() { checkDebug();if( mExitcmd ) {setAlloff();return;} if(!mStartTest ){setAlloff();continue;}}
+#define checkEven() { checkDebug();if( mExitcmd ) {setAlloff();return;} if(!mStartTest ){setAlloff();emit error("Test abort");continue;}}
 
 
 
@@ -475,6 +475,8 @@ void TesterThread::run()
                 break;
             }
             if( mExitcmd || !mStartTest ) break;
+            msleep(1);
+            ledhalfonTimeoutMs++;
         }
         if( !ledhalfon ){
             testRes.errorCode = TesterThread::ERRORCODE::E9;
@@ -554,19 +556,19 @@ void TesterThread::run()
         mLedAnimationIndex = 0;
         //LedBrightness_update_mean_cnt = 4;
         //LedBrightness_update = false;
-        testThread_clear_data(4,1);
+        testThread_clear_data(1,1);
         int res;
         bool checkRes;
 
         checkRes = false;
         testRes.LedAnimation = false;
-        while(ledAnimationTimeMs < 6000 )
+        while(ledAnimationTimeMs < 4000 )
         {
             timeoutMs = 0;
             while(!LedBrightness_update){
-                msleep(10);
-                timeoutMs+=10;
-                ledAnimationTimeMs+=10;
+                msleep(1);
+                timeoutMs+=1;
+                ledAnimationTimeMs+=1;
                 if( mExitcmd || !mStartTest ) break;
                 if( timeoutMs >= 1000 ) break;
             }
@@ -590,13 +592,20 @@ void TesterThread::run()
                 break;
             }
             if( mExitcmd || !mStartTest ) break;
+            msleep(1);
+            ledAnimationTimeMs++;
+            //emit log("animation timeout "+QString::number(ledAnimationTimeMs));
         }
         if( !checkRes ){
-            if( ledAnimationTimeMs >= 6000 )
+            if( ledAnimationTimeMs >= 6000 || timeoutMs >= 1000 ){
                 emit error("Verify Led animation timeout");
-            emit result(testRes);
-            setAlloff();
-            continue;
+                setAlloff();
+                continue;
+            }else{
+                emit result(testRes);
+                setAlloff();
+                continue;
+            }
         }
         setDisconnectShaver();
         setLedCaptureStop();
@@ -657,24 +666,32 @@ int TesterThread::testLedAnimationLoop()
 
         if( mLedAnimationIndex >= 12 ) return 1;
 #if 1
-        if( LedBrightness[mLedAnimationIndex] < LED_FULL_LOW_LEVEL){
+        if( LedBrightness[mLedAnimationIndex] < LED_ANIMATION_High_LOW_LEVEL){
             break;
         }
         unsigned char ledpos[12] = {0};
+        volatile int full_cnt = 0;
         ledpos[mLedAnimationIndex] = 1;
-        for( int j=1; j<=4; j++ ){ //the last 5 or < 5 led is full
+#if 1
+        for( int j=1; j<=0; j++ ){ //the last 5 or < 5 led is full
             if( (mLedAnimationIndex - j) >= 0){
                 ledpos[mLedAnimationIndex-j] = 1;
+                full_cnt++;
             }
         }
+#else
+        full_cnt = 1;
+#endif
         for( int i=0; i< 12; i++){
-            if( LedBrightness[i] < LED_ANIMATION_LOW_LEVEL ){
+            if( LedBrightness[i] < LED_ANIMATION_DIM_LOW_LEVEL ){
                 emit log("Step2 Failed, LED"+QString::number(i+1)+"is too dim:"+QString::number(LedBrightness[i]));
                 return -1;
             }
-            if( ledpos[i] == 1 && LedBrightness[i] <LED_FULL_LOW_LEVEL ){
+            if( ledpos[i] == 1 && LedBrightness[i] < LED_ANIMATION_High_LOW_LEVEL ){
                 emit log("Step2 Failed, LED"+QString::number(i+1)+"should be high");
                 return -1;
+                //emit log(QString::number(i));
+                //full_cnt--;
             }
             /*
             if( ledpos[i] == 0 && LedBrightness[i] > LED_FULL_LOW_LEVEL){
@@ -683,7 +700,10 @@ int TesterThread::testLedAnimationLoop()
             }
             */
         }
-        mLedAnimationIndex++;
+        //if( full_cnt <= 0) {
+            //emit log(QString::number(mLedAnimationIndex+1)+" OK");
+            mLedAnimationIndex++;
+        //}
 #endif
 
 #if 0

@@ -59,8 +59,8 @@ MainWindow::MainWindow(QWidget *parent) :
         title = title+",Rload_current(A)";
         title = title+",LED_Animation";
         for( int i=1; i<=12; i++ ) title = title+",LED"+QString::number(i)+"_100";
-        for( int i=1; i<=12; i++ ) title = title+",LED"+QString::number(i)+"_50";
-        title = title+"\r";
+        for( int i=1; i<=12; i++ ) title = title+",LED"+QString::number(i)+"_30";
+        title = title+"\r\n";
         mTxtfile.write(title.toLocal8Bit());
         mTxtfile.flush();
     }
@@ -463,7 +463,7 @@ void MainWindow::testerThread_result(TesterRecord res)
         for( int i=0; i<12; i++ ){
             record = record+QString::number(res.LedMidLevel[i])+",";
         }
-        record = record+"\r";
+        record = record+"\r\n";
         mTxtfile.write(record.toLocal8Bit());
         mTxtfile.flush();
     }
