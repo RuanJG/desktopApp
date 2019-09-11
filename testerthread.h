@@ -46,8 +46,8 @@
 #define LED_ANIMATION_High_LOW_LEVEL  40000
 
 //Measure value range
-#define VDD_MAX_V_LEVEL 3.55
-#define VDD_MIN_V_LEVEL 3.45
+#define VDD_MAX_V_LEVEL 3.61
+#define VDD_MIN_V_LEVEL 3.40
 #define LED_FULL_MAX_V_LEVEL 0.9
 #define LED_FULL_MIN_V_LEVEL 0.7
 #define LED_MID_MAX_V_LEVEL 0.3

@@ -351,7 +351,11 @@ void MainWindow::handle_Serial_Data( QByteArray &bytes )
                 }
             }else if(tag == PC_TAG_DATA_BUTTON){
                 if( cnt==1 && data[0]==1){
-                    on_startTestpushButton_clicked();
+                    if( mTxtfile.isOpen() ){
+                        on_startTestpushButton_clicked();
+                    }else{
+                        QMessageBox::warning(this,tr("错误"),tr("打开数据文件错误，尝试重启软件"));
+                    }
                 }else{
                     ui->consoleTextBrowser->append("Start Button data");
                 }
@@ -466,6 +470,8 @@ void MainWindow::testerThread_result(TesterRecord res)
         record = record+"\r\n";
         mTxtfile.write(record.toLocal8Bit());
         mTxtfile.flush();
+    }else{
+        QMessageBox::warning(this,tr("错误"),tr("打开数据文件错误，尝试重启软件，再重新测试"));
     }
 
     ui->autoTesterConsoletextBrowser->append("Tester Result : E"+QString::number(res.errorCode));
