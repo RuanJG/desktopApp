@@ -27,10 +27,14 @@ MainWindow::MainWindow(QWidget *parent) :
     QDir mdir;
     QString filedirPath = QDir::currentPath()+"/Data";
     QString filename =QDir::toNativeSeparators( filedirPath+"/"+"Barcode_Record.txt" );
+    QString dbfilename =QDir::toNativeSeparators( filedirPath+"/"+"Barcode_Record.db" );
     mdir.mkpath(filedirPath);
 
     if( !mBoxes.setFilename(filename) ){
         QMessageBox::warning(this,"Error",tr("打开数据文档失败"));
+    }
+    if( !mBoxes.setDataBaseFile(dbfilename) ){
+        QMessageBox::warning(this,"Error",tr("打开数据库失败"));
     }
 
 }

@@ -10,6 +10,7 @@
 #include <QList>
 #include <QFile>
 #include <QMessageBox>
+#include "databaser.h"
 
 typedef struct _UnitBox{
     QString boxQRcode;
@@ -18,8 +19,11 @@ typedef struct _UnitBox{
 }UnitsBox_t;
 
 class UnitBox{
+private:
+    DataBaser mDataBaser;
 public:
     UnitBox(){
+        mDataBaser = DataBaser();
         mBoxList.clear();
     }
     ~UnitBox(){
@@ -60,6 +64,13 @@ public:
     }
 
     bool flush(UnitsBox_t box){
+
+        return saveToFile(box) && saveToDataBase(box);
+        //return saveToDataBase(box);
+    }
+
+    bool saveToFile(UnitsBox_t box)
+    {
         QString record;
 
         record = box.boxQRcode;
@@ -79,7 +90,6 @@ public:
         mStoreFile.close();
         return true;
     }
-
     bool setFilename( QString filename )
     {
         if( mStoreFile.isOpen()){
@@ -96,6 +106,28 @@ public:
         return true;
     }
 
+    bool setDataBaseFile( QString filename)
+    {
+        if( mDataBaser.connectDataBase(filename) ){
+            mDataBaser.startQuery("create table barcode(boxBarcode text primary key, unitsBarcode text)");
+            return true;
+        }
+        return false;
+    }
+    bool saveToDataBase(UnitsBox_t box)
+    {
+        QString record;
+
+        if( !mDataBaser.isOpen() ) return false;
+
+        record = QString::number(box.unitsCnt);
+        for( int i=0; i< box.unitsCnt; i++){
+            record+= (","+box.unitsQRcodeList[i] );
+        }
+
+        //insert into barcode values("123123","123123123123")
+        return mDataBaser.startQuery("insert into barcode values(\""+box.boxQRcode+"\",\""+record+"\")");
+    }
 private:
     QFile mStoreFile;
     QList<UnitsBox_t> mBoxList;
