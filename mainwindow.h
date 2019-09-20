@@ -10,7 +10,11 @@
 #include <QList>
 #include <QFile>
 #include <QMessageBox>
-#include "databaser.h"
+#include <QtSql/QSql>
+#include <QtSql/QSqlDatabase>
+#include <QtSql/QSqlQuery>
+#include <QtSql/QSqlRecord>
+#include <QtSql/QSqlError>
 
 typedef struct _UnitBox{
     QString boxQRcode;
@@ -19,12 +23,13 @@ typedef struct _UnitBox{
 }UnitsBox_t;
 
 class UnitBox{
+
 private:
-    DataBaser mDataBaser;
+    QSqlDatabase mDataBase;
 public:
     UnitBox(){
-        mDataBaser = DataBaser();
         mBoxList.clear();
+        mDataBase = QSqlDatabase();
     }
     ~UnitBox(){
         mBoxList.clear();
@@ -108,25 +113,60 @@ public:
 
     bool setDataBaseFile( QString filename)
     {
-        if( mDataBaser.connectDataBase(filename) ){
-            mDataBaser.startQuery("create table barcode(boxBarcode text primary key, unitsBarcode text)");
-            return true;
+        if( mDataBase.isOpen() ) mDataBase.close();
+
+        mDataBase = QSqlDatabase::addDatabase("QSQLITE","barcodeDB");
+        mDataBase.setDatabaseName(filename);
+        if( ! mDataBase.open() ){
+            qDebug()<< "Error:%s"+ mDataBase.lastError().text();
+            return false;
         }
-        return false;
+        QSqlQuery sql_query(mDataBase);
+        sql_query.exec("create table barcode(boxBarcode text primary key, unitsBarcode text)");
+        return true;
     }
+
     bool saveToDataBase(UnitsBox_t box)
     {
         QString record;
+        QSqlQuery sql_query(mDataBase);
 
-        if( !mDataBaser.isOpen() ) return false;
+        if( !mDataBase.isOpen() ) return false;
 
         record = QString::number(box.unitsCnt);
         for( int i=0; i< box.unitsCnt; i++){
             record+= (","+box.unitsQRcodeList[i] );
         }
 
-        //insert into barcode values("123123","123123123123")
-        return mDataBaser.startQuery("insert into barcode values(\""+box.boxQRcode+"\",\""+record+"\")");
+        QString cmd = QString("select unitsBarcode from barcode where boxBarcode = \"%1\"").arg(box.boxQRcode);
+        qDebug() << "query: "+cmd;
+        if( sql_query.exec(cmd) ){
+            if (sql_query.next()) {
+                qDebug() << "sql check has record :"+ sql_query.record().value("unitsBarcode").toString();
+                //TODO ask user
+                if( sql_query.exec(QString("delete from barcode where boxBarcode = \"%1\"").arg(box.boxQRcode)) ){
+                    qDebug() << "sql delete ok";
+                }else{
+                    qDebug() << "sql delete false";
+                    return false;
+                }
+            }else{
+                qDebug() << "sql check no record ";
+            }
+        }else{
+            qDebug() << "sql check failed ";
+            return false;
+        }
+
+
+        cmd = QString("insert into barcode values(\"%1\",\"%2\")").arg(box.boxQRcode,record);
+        qDebug() << "query: "+cmd;
+        if( !sql_query.exec(cmd )){
+            qDebug()<< "sql ERROR : "+sql_query.lastError().text();
+            return false;
+        }
+
+        return true;
     }
 private:
     QFile mStoreFile;
