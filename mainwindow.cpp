@@ -12,8 +12,8 @@ MainWindow::MainWindow(QWidget *parent) :
     mBoxes()
 {
     ui->setupUi(this);
-    ui->indicatelabel_3->setFont(QFont("Microsoft YaHei", 20, 75));
-    ui->textBrowser->setFont(QFont("Microsoft YaHei", 10, 50));
+    ui->indicatelabel_3->setFont(QFont("Microsoft YaHei", 40, 75));
+    ui->textBrowser->setFont(QFont("Microsoft YaHei", 12, 50));
     QPalette pa;
     pa.setColor(QPalette::WindowText,Qt::red);
     ui->indicatelabel_3->setPalette(pa);
@@ -30,9 +30,9 @@ MainWindow::MainWindow(QWidget *parent) :
     QString dbfilename =QDir::toNativeSeparators( filedirPath+"/"+"Barcode_Record.db" );
     mdir.mkpath(filedirPath);
 
-    if( !mBoxes.setFilename(filename) ){
-        QMessageBox::warning(this,"Error",tr("打开数据文档失败"));
-    }
+    //if( !mBoxes.setFilename(filename) ){
+    //    QMessageBox::warning(this,"Error",tr("打开数据文档失败"));
+    //}
     if( !mBoxes.setDataBaseFile(dbfilename) ){
         QMessageBox::warning(this,"Error",tr("打开数据库失败"));
     }
@@ -58,17 +58,17 @@ MainWindow::updateStep()
 {
     switch( mStepIndex ){
     case 0:
-        ui->indicatelabel_3->setText(tr("扫描包装箱的条形码"));
+        ui->indicatelabel_3->setText(tr("1，扫描包装箱的条形码"));
         break;
 
     case 1:
-        ui->indicatelabel_3->setText(tr("扫描第")+QString::number(mCurrentBox.unitsQRcodeList.size()+1)+"个产品的条形码");
+        ui->indicatelabel_3->setText(tr("2，扫描第")+QString::number(mCurrentBox.unitsQRcodeList.size()+1)+"个产品的条形码");
         break;
     case 2:
-        ui->indicatelabel_3->setText(tr("将以上")+QString::number(mCurrentBox.unitsCnt)+tr("个产品打包"));
+        ui->indicatelabel_3->setText(tr("3，将以上")+QString::number(mCurrentBox.unitsCnt)+tr("个产品打包"));
         break;
     case 3:
-        ui->indicatelabel_3->setText(tr("保存数据失败，重启软件，重新扫描"));
+        ui->indicatelabel_3->setText(tr("保存数据失败，重启软件，重新扫描 ！"));
         break;
     }
 }
@@ -93,9 +93,26 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *e)
                     mCurrentBox.boxQRcode = QString::fromLocal8Bit(mStringData);
                     mCurrentBox.unitsCnt = 0;
                     mCurrentBox.unitsQRcodeList.clear();
-                    mStepIndex++;
-                    updateStep();
-                    updateTable();
+
+                    QString crecord;
+                    if( mBoxes.findbox(mCurrentBox.boxQRcode,crecord) ){
+                        if( crecord.length() > 0){
+                            QMessageBox Msg(QMessageBox::Question, tr("警告"), tr("此包装箱已经扫描过，是否继续？"),QMessageBox::Yes | QMessageBox::No, NULL );
+                            if( Msg.exec() == QMessageBox::Yes){
+                                mStepIndex++;
+                                updateStep();
+                                updateTable();
+                            }
+                        }else{
+                            mStepIndex++;
+                            updateStep();
+                            updateTable();
+                        }
+                    }else{
+                        QMessageBox::warning(this,"Error",tr("查询数据失败，重启软件，重新扫描"));
+                        mStepIndex = 3;
+                        updateStep();
+                    }
                 }
                 mStringData.clear();
             }
@@ -153,6 +170,8 @@ void MainWindow::slot_Start_Packing()
     mCurrentBox.boxQRcode.clear();
     mCurrentBox.unitsQRcodeList.clear();
     updateTable();
+
+    mStringData.clear();
 }
 
 void MainWindow::on_reducepushButton_clicked()
@@ -168,4 +187,19 @@ void MainWindow::on_AddpushButton_2_clicked()
     int value = ui->unitsCountspinBox->value();
     ui->unitsCountspinBox->setValue(value+1);
     updateTable();
+}
+
+void MainWindow::on_exportpushButton_clicked()
+{
+    QDir mdir;
+    QString filedirPath = QDir::currentPath()+"/Data";
+    QString filename =QDir::toNativeSeparators( filedirPath+"/"+"Barcode_Record.txt" );
+    mdir.mkpath(filedirPath);
+
+    if( mBoxes.exportToTxtfile(filename) )
+    {
+        QMessageBox::information(this,tr("数据导出"),tr("数据已保存在")+filename);
+    }else{
+        QMessageBox::warning(this,tr("数据导出"),tr("数据导出失败"));
+    }
 }
