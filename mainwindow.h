@@ -36,6 +36,8 @@ public:
 
 public slots:
     void slot_Start_Packing();
+    void slot_Start_connectDB();
+
 private slots:
     void on_reducepushButton_clicked();
 
@@ -53,15 +55,30 @@ private slots:
 
     void on_boxcheckpushButton_clicked();
 
+    void on_testDBpushButton_clicked();
+
+    void on_connectRemoteDBpushButton_2_clicked();
+
+    void on_connectLocalDBpushButton_clicked();
+
+    void on_mergerLocaldbpushButton_clicked();
+
 private:
     Ui::MainWindow *ui;
     volatile int mStepIndex;
-    DataBaseHelper mBarcodeDataBase;
+    DataBaseHelper mDataBaseHelper;
     UnitsBox mCurrentBox;
     QByteArray mStringData;
     QMessageBox mMsgbox;
     void updateTable();
     void updateStep();
+    void testDatabase(DataBaseHelper *db);
+    bool openRemoteDataBase(DataBaseHelper *mdber);
+    bool openLocalDataBase(DataBaseHelper *mdber);
+    void updateDBConnectStatus();
+    bool isUsingLocalDB(DataBaseHelper *mdber);
+    bool mergeLocalDBToRemote(QString localDBFileNmae);
+    QString mLocalDataBaseFileName;
 };
 
 

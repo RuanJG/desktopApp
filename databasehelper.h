@@ -19,29 +19,89 @@
 class DataBaseHelper{
 
 private:
+
     QSqlDatabase mDataBase;
 public:
     DataBaseHelper(){
         mDataBase = QSqlDatabase();
     }
     ~DataBaseHelper(){
-        if( mDataBase.isOpen() ){
-            mDataBase.close();
-        }
+        close();
     }
 
     bool openDataBaseFile( QString filename)
     {
+        static int DBcounter = 0;
+
         if( mDataBase.isOpen() ) mDataBase.close();
 
-        mDataBase = QSqlDatabase::addDatabase("QSQLITE","barcodeDB");
+        mDataBase = QSqlDatabase::addDatabase("QSQLITE",QString("barcodeDB%1").arg(++DBcounter));
         mDataBase.setDatabaseName(filename);
         if( ! mDataBase.open() ){
             qDebug()<< "Error:%s"+ mDataBase.lastError().text();
+            mDataBase = QSqlDatabase();
+            QSqlDatabase::removeDatabase(QString("barcodeDB%1").arg(DBcounter));
             return false;
         }
         QSqlQuery sql_query(mDataBase);
         return sql_query.exec("create table  if not exists BarcodeTable(Boxcode text primary key, RRCcodeList text, Quantity int, PackDate text, POcode text, DelieverDate text)");
+    }
+
+    bool openDataBase(QString dbDriver , QString dbName, QString hostName, QString userName, QString password)
+    {
+
+        static int DBcounter = 0;
+
+        if( mDataBase.isOpen() ) mDataBase.close();
+
+        mDataBase = QSqlDatabase::addDatabase(dbDriver, QString("DB%1").arg(++DBcounter));//"QODBC");
+        mDataBase.setDatabaseName(dbName);//"DRIVER={SQL SERVER};SERVER=RSERP;DATABASE=AG");
+        mDataBase.setHostName(hostName);//"RSERP");
+        mDataBase.setUserName(userName);//"AG");
+        mDataBase.setPassword(password);//"AG123456");
+        mDataBase.setConnectOptions("SQL_ATTR_LOGIN_TIMEOUT=3");
+        if ( ! mDataBase.open()) {
+            qDebug()<< "Error:"+ mDataBase.lastError().text();
+            mDataBase = QSqlDatabase();
+            QSqlDatabase::removeDatabase(QString("barcodeDB%1").arg(DBcounter));
+            return false;
+        }
+        QSqlQuery sql_query(mDataBase);
+        if( ! sql_query.exec("if OBJECT_ID(N'BarcodeTable',N'U') is null create table BarcodeTable(Boxcode varchar(50) primary key, RRCcodeList varchar(200), Quantity int, PackDate varchar(20), POcode varchar(20), DelieverDate varchar(20))") ){
+            qDebug()<< "Error:%s"+ sql_query.lastError().text();
+            return false;
+        }
+        return true;
+    }
+
+    QString getDriverName()
+    {
+        return mDataBase.driverName();
+    }
+
+    QString getDataBaseName(){
+        return mDataBase.databaseName();
+    }
+
+    void close(){
+        if( ! mDataBase.isOpen() ) return;
+
+        QString connectName = mDataBase.connectionName();
+        mDataBase.close();
+        mDataBase = QSqlDatabase();
+        QSqlDatabase::removeDatabase(connectName);
+    }
+
+    bool isOpen(){
+        return mDataBase.isOpen();
+    }
+
+    bool sqlCmdExec(QSqlQuery &sql_query,QString cmd ){
+        sql_query = QSqlQuery(mDataBase);
+        if( ! sql_query.exec( cmd ) ){
+            return false;
+        }
+        return true;
     }
 
     bool append( UnitsBox box)
@@ -56,7 +116,7 @@ public:
     {
         if( ! mDataBase.isOpen() ) return false;
 
-        QString cmd = QString("delete from BarcodeTable where Boxcode = \"%1\"").arg(boxCode);
+        QString cmd = QString("delete from BarcodeTable where Boxcode = '%1'").arg(boxCode);
         QSqlQuery sql_query(mDataBase);
         qDebug() << "query: "+cmd;
         return sql_query.exec(cmd);
@@ -66,7 +126,7 @@ public:
     {
         if( ! mDataBase.isOpen() ) return false;
 
-        QString cmd = QString("update BarcodeTable set RRCcodeList = \"%1\", Quantity = \"%2\", PackDate = \"%3\", POcode = \"%4\", DelieverDate = \"%5\" where Boxcode = \"%6\"").arg(RRCcodeListToString(box),QString::number(box.RRCcount),box.packDate,box.poCode,box.delieverDate,box.boxQRcode);
+        QString cmd = QString("update BarcodeTable set RRCcodeList = '%1', Quantity = '%2', PackDate = '%3', POcode = '%4', DelieverDate = '%5' where Boxcode = '%6'").arg(RRCcodeListToString(box),QString::number(box.RRCcount),box.packDate,box.poCode,box.delieverDate,box.boxQRcode);
         QSqlQuery sql_query(mDataBase);
         qDebug() << "query: "+cmd;
         return sql_query.exec(cmd);
@@ -79,7 +139,7 @@ public:
 
         if( ! mDataBase.isOpen() ) return boxlist;
 
-        QString cmd = QString("select * from BarcodeTable where Boxcode = \"%1\"").arg(boxCode);
+        QString cmd = QString("select * from BarcodeTable where Boxcode = '%1'").arg(boxCode);
         QSqlQuery sql_query(mDataBase);
         sql_query.setForwardOnly(true);
         qDebug() << "query: "+cmd;
@@ -99,7 +159,7 @@ public:
 
         if( ! mDataBase.isOpen() ) return boxlist;
 
-        QString cmd = QString("select * from BarcodeTable where RRCcodeList like = \"\%%1\%\"").arg(unitCode);
+        QString cmd = QString("select * from BarcodeTable where RRCcodeList like '\%%1\%'").arg(unitCode);
         QSqlQuery sql_query(mDataBase);
         sql_query.setForwardOnly(true);
         qDebug() << "query: "+cmd;
@@ -124,7 +184,7 @@ public:
         if( POcode == "*"){
             cmd = QString("select * from BarcodeTable");
         }else{
-            cmd = QString("select * from BarcodeTable where POcode=\"%1\"").arg(POcode);
+            cmd = QString("select * from BarcodeTable where POcode='%1'").arg(POcode);
         }
         qDebug() << cmd;
         if( !sql_query.exec(cmd) ){
@@ -190,7 +250,7 @@ private:
         RRCcodeList = RRCcodeListToString(box);
 
         //Boxcode text primary key, RRCcodeList text, Quantity int, PackDate text, POcode text, DelieverDate
-        QString cmd = QString("insert into BarcodeTable values(\"%1\",\"%2\",%3,\"%4\",\"%5\",\"%6\")").arg(box.boxQRcode,RRCcodeList,QString::number(box.RRCcount),box.packDate,box.poCode,box.delieverDate);
+        QString cmd = QString("insert into BarcodeTable values('%1','%2',%3,'%4','%5','%6')").arg(box.boxQRcode,RRCcodeList,QString::number(box.RRCcount),box.packDate,box.poCode,box.delieverDate);
         if( !sql_query.exec(cmd)){
             qDebug()<< "sql ERROR : "+sql_query.lastError().text();
             return false;
