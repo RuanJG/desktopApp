@@ -18,6 +18,7 @@
 #define POCODE_LENGTH  6 //TODO confirm ?
 #define BOXCODE_LENGTH 20
 #define DELIEVERY_DATE_LENGTH 8
+#define BARCODE_LENGTH 13
 
 class UnitsBox{
 public:

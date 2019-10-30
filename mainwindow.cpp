@@ -227,15 +227,15 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *e)
                 }
             }
         }else if( mStepIndex == 1){
-            //prase units code : 0x2 [13] 0x4
+            //prase units code : 0x2 [BARCODE_LENGTH] 0x4
             int index = mStringData.indexOf(0x2);
             if( index > 0 ) mStringData.remove(0,index);
             if ( index == -1 ) mStringData.clear();
 
-            if( mStringData.length() >= 15 ){
-                if( mStringData.at(14)==0x04){
+            if( mStringData.length() >= (BARCODE_LENGTH+2) ){
+                if( mStringData.at(BARCODE_LENGTH+1)==0x04){
                     mStringData.remove(0,1);
-                    mStringData.remove(13,mStringData.length()-13);
+                    mStringData.remove(BARCODE_LENGTH,mStringData.length()-BARCODE_LENGTH);
                     QString barcode = QString::fromLocal8Bit(mStringData);
                     if( 0 > mCurrentBox.RRCcodeList.indexOf(barcode) ){
                         //check whether it is existed ? or ignore
@@ -503,6 +503,7 @@ void MainWindow::on_boxlisttxtfileimportpushButton_4_clicked()
     QString BoxCode;
     QString POcode = ui->poCodeimportlineEdit_3->text();
     QString DelievryDate = ui->dateEdit->text();
+    QString Barcode = "";
 
     if( POcode.length() != POCODE_LENGTH ){
         QMessageBox::warning(this,"Error",tr("请先填写订单号"));
@@ -544,14 +545,23 @@ void MainWindow::on_boxlisttxtfileimportpushButton_4_clicked()
                 BoxCode = str;
             }else if( str.length() == DELIEVERY_DATE_LENGTH){
                 DelievryDate = str;
+            }else if( str.length() ==  BARCODE_LENGTH){
+                Barcode = str;
             }else{
                 //ignore useless imformation
             }
         }
-        if( BoxCode.length() != BOXCODE_LENGTH) continue;
+        if( BoxCode.length() != BOXCODE_LENGTH){
+            if( Barcode.length() == BARCODE_LENGTH && POcode.length() != 0){
+                //the txt file is [barcode,date,po] each line, we make up the boxcode = 0000000barcode
+                BoxCode = "0000000"+Barcode;
+            }else{
+                continue;
+            }
+        }
 
         totallyCount++;
-        //save to database
+        //save to database, [boxcode,date,po] each line
         QList<UnitsBox> boxlist = mDataBaseHelper.findBoxbyBoxCode(BoxCode);
         if( boxlist.size() > 0 ){
             //exist , update the box record
@@ -575,11 +585,32 @@ void MainWindow::on_boxlisttxtfileimportpushButton_4_clicked()
             }
 
         }else{
-           //no record !!
-            ui->importtextBrowser_2->append(QString::number(totallyCount)+","+BoxCode+",生产线上没有这个箱号的记录");
-            QMessageBox::warning(this,tr("错误"),tr("数据库中没有箱号（%1）的记录，请先通知生产更新数据到服务器").arg(BoxCode));
-            txtfile.close();
-            return;
+            if( Barcode.length() == BARCODE_LENGTH && POcode.length() != 0){
+                UnitsBox boxnew;
+                //the txt file is [barcode,date,po] each line
+                boxnew.boxQRcode = BoxCode;
+                boxnew.RRCcodeList = Barcode.split(",");
+                boxnew.RRCcount = boxnew.RRCcodeList.size();
+                boxnew.delieverDate = DelievryDate;
+                boxnew.poCode = POcode;
+                boxnew.packDate = DelievryDate;
+                if( !mDataBaseHelper.append(boxnew) ){
+                    ui->importtextBrowser_2->append(QString::number(totallyCount)+","+BoxCode+",添加订单号到数据库失败");
+                    QMessageBox::warning(this,tr("错误"),tr("更新订单信息到数据库失败，请检查错误再重试"));
+                    txtfile.close();
+                    return;
+                }else{
+                    //ui->importtextBrowser_2->append(QString::number(totallyCount)+","+BoxCode);
+                    importCount++;
+                }
+            }else{
+                //no record !!
+                 ui->importtextBrowser_2->append(QString::number(totallyCount)+","+BoxCode+",生产线上没有这个箱号的记录");
+                 QMessageBox::warning(this,tr("错误"),tr("数据库中没有箱号（%1）的记录，请先通知生产更新数据到服务器").arg(BoxCode));
+                 txtfile.close();
+                 return;
+            }
+
         }
     }
 
