@@ -63,6 +63,8 @@ private slots:
 
     void on_mergerLocaldbpushButton_clicked();
 
+    void on_localModecheckBox_toggled(bool checked);
+
 private:
     Ui::MainWindow *ui;
     volatile int mStepIndex;
@@ -70,6 +72,7 @@ private:
     UnitsBox mCurrentBox;
     QByteArray mStringData;
     QMessageBox mMsgbox;
+    volatile bool mUsingLocalDB;
     void updateTable();
     void updateStep();
     void testDatabase(DataBaseHelper *db);

@@ -59,7 +59,7 @@ public:
         mDataBase.setHostName(hostName);//"RSERP");
         mDataBase.setUserName(userName);//"AG");
         mDataBase.setPassword(password);//"AG123456");
-        mDataBase.setConnectOptions("SQL_ATTR_LOGIN_TIMEOUT=3");
+        mDataBase.setConnectOptions("SQL_ATTR_LOGIN_TIMEOUT=5");
         if ( ! mDataBase.open()) {
             qDebug()<< "Error:"+ mDataBase.lastError().text();
             mDataBase = QSqlDatabase();

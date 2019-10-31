@@ -26,6 +26,7 @@ MainWindow::MainWindow(QWidget *parent) :
     mdir.mkpath(filedirPath);
     mLocalDataBaseFileName =QDir::toNativeSeparators( filedirPath+"/"+"Barcode_Record.db" );
 
+    mUsingLocalDB = false;
     QTimer::singleShot(1000, this, SLOT(slot_Start_connectDB()));
     mStepIndex = -1;
     updateTable();
@@ -39,18 +40,40 @@ MainWindow::~MainWindow()
 
 void MainWindow::slot_Start_connectDB()
 {
-    if( ! openRemoteDataBase(&mDataBaseHelper) ){
-        mDataBaseHelper.close();
-        mStepIndex = -2;
-        /*
+
+    if( mDataBaseHelper.isOpen() ) return; //if manual set use local db, no need to reconnect.
+
+    if( mUsingLocalDB ){
         if( openLocalDataBase( &mDataBaseHelper ) ){
             mStepIndex = 0;
         }else{
+            mDataBaseHelper.close();
+            mStepIndex = -2;
         }
-        */
     }else{
-        mStepIndex = 0;
+        if( ! openRemoteDataBase(&mDataBaseHelper) ){
+    #if 1 // 1: warn and or reconnect or warn
+
+            mDataBaseHelper.close();
+            mStepIndex = -2;
+    #if 1 //1: reconnect frequenctly
+            QTimer::singleShot(3000, this, SLOT(slot_Start_connectDB()));
+    #endif
+
+    #else
+            if( openLocalDataBase( &mDataBaseHelper ) ){
+                mStepIndex = 0;
+            }else{
+                mDataBaseHelper.close();
+                mStepIndex = -2;
+            }
+    #endif
+        }else{
+            mStepIndex = 0;
+        }
     }
+
+
 
     updateTable();
     updateStep();
@@ -69,18 +92,18 @@ bool MainWindow::openRemoteDataBase( DataBaseHelper *mdber)
         if( isUsingLocalDB(mdber) ){
             mdber->close();
         }else{
-            ui->importtextBrowser_2->append(tr("当前已连接远程数据库"));
+            ui->importtextBrowser_2->append(tr("当前已连接数据库服务器"));
             return true;
         }
     }
 
     if( ! mdber->openDataBase("QODBC", "DRIVER={SQL SERVER};SERVER=RSERP;DATABASE=AG", "RSERP", "AG", "AG123456")){
-        ui->importtextBrowser_2->append(tr("连接远程数据库失败"));
+        ui->importtextBrowser_2->append(tr("连接数据库服务器失败"));
         mdber->close();
-        //QMessageBox::warning(this,"Error",tr("打开远程数据库失败"));
+        //QMessageBox::warning(this,"Error",tr("打开数据库服务器失败"));
         res = false;
     }else{
-        ui->importtextBrowser_2->append(tr("已连接远程数据库"));
+        ui->importtextBrowser_2->append(tr("已连接数据库服务器"));
     }
 
     updateDBConnectStatus();
@@ -96,7 +119,7 @@ bool MainWindow::openLocalDataBase(DataBaseHelper *mdber)
         if( !isUsingLocalDB(mdber) ){
             mdber->close();
         }else{
-            ui->importtextBrowser_2->append(tr("当前已连接远程数据库"));
+            ui->importtextBrowser_2->append(tr("当前已连接数据库服务器"));
             return true;
         }
     }
@@ -119,15 +142,15 @@ void MainWindow::updateDBConnectStatus(){
 
     if( !mDataBaseHelper.isOpen()){
         ui->connectLocalDBpushButton->setText(tr("连接本地数据库"));
-        ui->connectRemoteDBpushButton_2->setText(tr("连接远程数据库"));
+        ui->connectRemoteDBpushButton_2->setText(tr("连接数据库服务器"));
         mStepIndex = -2;
     }else{
         if( isUsingLocalDB(&mDataBaseHelper) ){
             ui->connectLocalDBpushButton->setText(tr("断开本地数据库"));
-            ui->connectRemoteDBpushButton_2->setText(tr("连接远程数据库"));
+            ui->connectRemoteDBpushButton_2->setText(tr("连接数据库服务器"));
         }else{
             ui->connectLocalDBpushButton->setText(tr("连接本地数据库"));
-            ui->connectRemoteDBpushButton_2->setText(tr("断开远程数据库"));
+            ui->connectRemoteDBpushButton_2->setText(tr("断开数据库服务器"));
         }
         mStepIndex =0;
     }
@@ -152,7 +175,7 @@ void MainWindow::updateStep()
     switch( mStepIndex ){
 
     case -2:
-        ui->indicatelabel_3->setText(tr("连接数据库失败\n请检查网络，或设置为离线测试"));
+        ui->indicatelabel_3->setText(tr("连接数据库失败\n请检查网络"));
         break;
 
     case -1:
@@ -414,7 +437,7 @@ bool MainWindow::mergeLocalDBToRemote(QString localDBFileNmae)
     int count = 0;
 
     while(sql_query.next()) {
-        //本地数据库的 Boxcode , RRCcodeList , Quantity, PackDate 将更新到远程数据库中
+        //本地数据库的 Boxcode , RRCcodeList , Quantity, PackDate 将更新到数据库服务器中
         /*
         box.boxQRcode = sql_query.record().value("boxBarcode").toString();
         box.RRCcodeList = sql_query.record().value("unitsBarcode").toString().split(QRegExp("[,\t]"),QString::SkipEmptyParts);
@@ -435,8 +458,8 @@ bool MainWindow::mergeLocalDBToRemote(QString localDBFileNmae)
         if( boxlist.size() > 0){
             //update box
             if( boxlist.size()>1){
-                ui->importtextBrowser_2->append("mergeLocalDBToRemote Error:"+tr("远程数据库查询到两个相同箱号，数据库有错误！"));
-                QMessageBox::warning(this,"mergeLocalDBToRemote Error:",tr("远程数据库查询到两个相同箱号，数据库有错误！"));
+                ui->importtextBrowser_2->append("mergeLocalDBToRemote Error:"+tr("数据库服务器查询到两个相同箱号，数据库有错误！"));
+                QMessageBox::warning(this,"mergeLocalDBToRemote Error:",tr("数据库服务器查询到两个相同箱号，数据库有错误！"));
                 localDataBase.close();
                 return false;
             }
@@ -730,7 +753,7 @@ void MainWindow::testDatabase( DataBaseHelper *db)
 void MainWindow::on_connectRemoteDBpushButton_2_clicked()
 {
     ui->importtextBrowser_2->append(tr("开始连接数据库..."));
-    QMessageBox::information(this,tr("提示"),tr("连接远程数据库有时要较长时间，请耐心等待，不要关闭软件"));
+    QMessageBox::information(this,tr("提示"),tr("连接数据库服务器有时要较长时间，请耐心等待，不要关闭软件"));
     openRemoteDataBase(& mDataBaseHelper );
 }
 
@@ -742,11 +765,16 @@ void MainWindow::on_connectLocalDBpushButton_clicked()
 void MainWindow::on_mergerLocaldbpushButton_clicked()
 {
     if( ! mDataBaseHelper.isOpen() || isUsingLocalDB(& mDataBaseHelper)){
-        QMessageBox::warning(this,"Error",tr("请先连接远程数据库"));
+        QMessageBox::warning(this,"Error",tr("请先连接数据库服务器"));
         return;
     }
 
     ui->importtextBrowser_2->append(tr("开始合并数据..."));
     QMessageBox::information(this,tr("提示"),tr("数据合并时需要一定时间，请耐心等待，不要关闭软件"));
     mergeLocalDBToRemote(mLocalDataBaseFileName);
+}
+
+void MainWindow::on_localModecheckBox_toggled(bool checked)
+{
+    mUsingLocalDB = checked;
 }
