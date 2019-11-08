@@ -2,6 +2,10 @@
 #include <QDateTime>
 #include <QDebug>
 
+
+
+
+
 TesterThread::TesterThread(QObject *parent) : QThread(parent),mMutex()
 {
     mExitcmd = false;
@@ -160,6 +164,7 @@ void TesterThread::run()
         testRes.date = QDateTime::currentDateTime().toString("yyyyMMddhhmmss");
         testRes.errorCode = ERRORCODE::E0;
         testRes.errorCodeString = "";
+        testRes.errorCodeParameter =0;
         mStartTest = false;
         emit log("AutoTest: Standby");
         while( !mStartTest )
@@ -208,7 +213,7 @@ void TesterThread::run()
             emit log("get QRcode: "+ QRcode);
             if( QRcode.length() != qrcodeExample.length() ){
                 testRes.errorCode = ERRORCODE::E1;
-                testRes.errorCodeString = "QRcode error";
+                testRes.errorCodeString = QRcode+tr(":二维码不符合要求");
             }
             if( testRes.errorCode != ERRORCODE::E0){
                 emit result(testRes);
@@ -216,7 +221,7 @@ void TesterThread::run()
                 continue;
             }
         }else{
-            emit error("Scan QRcode timeout");
+            emit error(tr("扫描二维码超时"));
             setAlloff();
             continue;
         }
@@ -258,7 +263,8 @@ void TesterThread::run()
                 //TODO check the level in range;
                 if( LedBrightness[i] < LED_FULL_LOW_LEVEL ){
                     testRes.errorCode = ERRORCODE::E2;
-                    testRes.errorCodeString = "LED"+QString(i+1)+": 100% is too dim";
+                    testRes.errorCodeParameter |= (1 << (i+1));
+                    testRes.errorCodeString += tr("LED%1 100%亮度(%2)过暗,").arg(i+1,LedBrightness[i]);
                 }
                 testRes.LedFullLevel[i] = LedBrightness[i];
             }
@@ -268,7 +274,7 @@ void TesterThread::run()
                 continue;
             }
         }else{
-            emit error("Verify Led brighness timeout");
+            emit error(tr("100%亮度时LED亮度数据读取超时"));
             setAlloff();
             continue;
         }
@@ -284,7 +290,7 @@ void TesterThread::run()
             testRes.VLedFull = VMeter_value;
             if( VMeter_value > LED_FULL_MAX_V_LEVEL || VMeter_value < LED_FULL_MIN_V_LEVEL){
                 testRes.errorCode = ERRORCODE::E3;
-                testRes.errorCodeString = "VLED_100%="+QString::number(VMeter_value,'f',4)+",is out of range ";
+                testRes.errorCodeString = tr("100%亮度时LED电压值(%1)不在范围[%2,%3],").arg(QString::number(VMeter_value,'f',4),QString::number(LED_FULL_MIN_V_LEVEL),QString::number(LED_FULL_MAX_V_LEVEL));
             }
             if( !keepTestEvenNG && testRes.errorCode != ERRORCODE::E0){
                 emit result(testRes);
@@ -292,7 +298,7 @@ void TesterThread::run()
                 continue;
             }
         }else{
-            emit error("Verify Led current timeout");
+            emit error(tr("100%亮度时LED电压数据读取超时"));
             setAlloff();
             continue;
         }
@@ -319,7 +325,7 @@ void TesterThread::run()
             testRes.VDD = VMeter_value;
             if( VMeter_value > VDD_MAX_V_LEVEL || VMeter_value < VDD_MIN_V_LEVEL){
                 testRes.errorCode = ERRORCODE::E4;
-                testRes.errorCodeString = "VDD="+QString::number(VMeter_value,'f',4)+",is out of range ";
+                testRes.errorCodeString = tr("VDD=（%1）不在范围[%2,%3]").arg(QString::number(VMeter_value,'f',4),QString::number(VDD_MIN_V_LEVEL),QString::number(VDD_MAX_V_LEVEL));
             }
             if( !keepTestEvenNG && testRes.errorCode != ERRORCODE::E0){
                 emit result(testRes);
@@ -327,7 +333,7 @@ void TesterThread::run()
                 continue;
             }
         }else{
-            emit error("Verify VDD timeout");
+            emit error(tr("VDD电压数据读取超时"));
             setAlloff();
             continue;
         }
@@ -371,7 +377,8 @@ void TesterThread::run()
                 testRes.LedMidLevel[i] = LedBrightness[i];
                 if( LedBrightness[i] < LED_MID_LOW_LEVEL || LedBrightness[i] > LED_MID_HIGH_LEVEL ){
                     testRes.errorCode = ERRORCODE::E5;
-                    testRes.errorCodeString = "Brightness of LED"+QString(i+1)+": 30% is not in range";
+                    testRes.errorCodeParameter |= (1 << (i+1));
+                    testRes.errorCodeString += tr("LED%1 30%亮度(%2)不在范围[%3,%4]").arg(i+1,LedBrightness[i],LED_MID_LOW_LEVEL,LED_MID_HIGH_LEVEL);
                 }
             }
             if( !keepTestEvenNG && testRes.errorCode != ERRORCODE::E0){
@@ -380,7 +387,7 @@ void TesterThread::run()
                 continue;
             }
         }else{
-            emit error("Verify Led Mid brighness timeout");
+            emit error(tr("30%亮度时，LED亮度数据读取超时"));
             setAlloff();
             continue;
         }
@@ -396,7 +403,7 @@ void TesterThread::run()
             testRes.VLedMid = VMeter_value;
             if( VMeter_value > LED_MID_MAX_V_LEVEL || VMeter_value < LED_MID_MIN_V_LEVEL){
                 testRes.errorCode = ERRORCODE::E6;
-                testRes.errorCodeString = "VLED_30%="+QString::number(VMeter_value,'f',4)+",is out of range ";
+                testRes.errorCodeString = tr("30%亮度时LED电压值=%1, ")+QString::number(VMeter_value,'f',4)+tr("，不符合要求");
             }
             if( !keepTestEvenNG && testRes.errorCode != ERRORCODE::E0){
                 emit result(testRes);
@@ -404,7 +411,7 @@ void TesterThread::run()
                 continue;
             }
         }else{
-            emit error("Verify Led mid current timeout");
+            emit error(tr("30%亮度时，LED电压数据读取超时"));
             setAlloff();
             continue;
         }
@@ -460,11 +467,11 @@ void TesterThread::run()
                         LenonCnt++;
                     }
                 }
-                LedBrightness_update = false; //!!!!!
                 if( LenonCnt == 6 ) { ledhalfon = true; break;}
-                if( LenonCnt > 6 ) { ledhalfon = false; emit error("Verify Led harf on Failed");break;}
+                if( LenonCnt > 6 ) { ledhalfon = false; emit error(tr("进入测试模式4，LED亮度异常"));break;}
+                LedBrightness_update = false; //!!!!!
             }else{
-                emit error("Verify Led harf on data timeout");
+                emit error(tr("进入测试模式4，LED亮度数据读取超时"));
                 ledhalfon = false;
                 break;
             }
@@ -473,12 +480,12 @@ void TesterThread::run()
             ledhalfonTimeoutMs++;
         }
         if( !ledhalfon ){
-            testRes.errorCode = TesterThread::ERRORCODE::E9;
-            testRes.errorCodeString = "In Testmode4 , LED is not half on , half off";
+            //testRes.errorCode = TesterThread::ERRORCODE::E9;
+            //testRes.errorCodeString =  tr("进行测试模式4后，LED亮度异常");
             if( !keepTestEvenNG ){
-                emit result(testRes);
+                //emit result(testRes);
                 setAlloff();
-                if( ledhalfonTimeoutMs >= 3000 ) emit error("Verify Led harf on timeout");
+                //if( ledhalfonTimeoutMs >= 3000 ) emit error(tr("测试模式4，LED检测超时"));
                 continue;
             }else{
                 if( ledhalfonTimeoutMs >= 3000 ) emit log("Verify Led harf on timeout");
@@ -501,7 +508,7 @@ void TesterThread::run()
             emit log("VRload="+QString::number(VMeter_value,'f',6)+"; A="+QString::number(testRes.RloadCurrent,'f',6));
             if( testRes.RloadCurrent > RLOAD_MAX_A_LEVEL || testRes.RloadCurrent < RLOAD_MIN_A_LEVEL){
                 testRes.errorCode = ERRORCODE::E7;
-                testRes.errorCodeString = "Rload current="+QString::number(VMeter_value,'f',4)+",is out of range ";
+                testRes.errorCodeString = tr("负载电阻充电电流=%1，不在范围[%2,%3]").arg(QString::number(VMeter_value,'f',4),QString::number(RLOAD_MIN_A_LEVEL),QString::number(RLOAD_MAX_A_LEVEL));//+tr(", 不符合要求");
             }
             if(!keepTestEvenNG &&  testRes.errorCode != ERRORCODE::E0){
                 emit result(testRes);
@@ -509,7 +516,7 @@ void TesterThread::run()
                 continue;
             }
         }else{
-            emit error("Verify RLoad current timeout");
+            emit error(tr("负载电阻的电压数据读取超时"));
             setAlloff();
             continue;
         }
@@ -604,7 +611,7 @@ void TesterThread::run()
                 LedBrightness_update = false; //!!!!!
                 if( -1 ==  res){
                     testRes.errorCode = ERRORCODE::E8;
-                    testRes.errorCodeString = "LED Animation detection failed";
+                    testRes.errorCodeString = tr("连接剃须刀后，LED动态效果测试失败");
                     checkRes = false;
                     break;
                 }
@@ -614,7 +621,6 @@ void TesterThread::run()
                     break;
                 }
             }else{
-                emit error("Verify Led animation data timeout");
                 checkRes = false;
                 break;
             }
@@ -625,7 +631,7 @@ void TesterThread::run()
         }
         if( !checkRes ){
             if( ledAnimationTimeMs >= 6000 || timeoutMs >= 1000 ){
-                emit error("Verify Led animation timeout");
+                emit error(tr("LED动态效果检测超时"));
                 setAlloff();
                 continue;
             }else{
@@ -691,6 +697,27 @@ int TesterThread::testLedAnimationLoop()
     case 2:{
         //check mid -> full
 
+#if 1
+        if( mLedAnimationIndex == 0xfff) return 1;
+
+        for( int i=0; i< 12; i++){
+            if( LedBrightness[i] < LED_ANIMATION_DIM_LOW_LEVEL ){
+                emit log("Step2 Failed, LED"+QString::number(i+1)+"is too dim:"+QString::number(LedBrightness[i]));
+                return -1;
+            }
+            if( LedBrightness[i] >= LED_ANIMATION_High_LOW_LEVEL ){
+                emit log("LED"+QString::number(i+1)+" checked.");
+                mLedAnimationIndex |= ( 1 << i);
+            }
+        }
+
+        if( mLedAnimationIndex == 0xfff ) {
+            emit log("Step2 OK");
+            return 1;
+        }
+        break;
+
+#else
         if( mLedAnimationIndex >= 12 ) return 1;
 #if 1
         if( LedBrightness[mLedAnimationIndex] < LED_ANIMATION_High_LOW_LEVEL){
@@ -717,38 +744,7 @@ int TesterThread::testLedAnimationLoop()
             if( ledpos[i] == 1 && LedBrightness[i] < LED_ANIMATION_High_LOW_LEVEL ){
                 emit log("Step2 Failed, LED"+QString::number(i+1)+"should be high");
                 return -1;
-                //emit log(QString::number(i));
-                //full_cnt--;
             }
-            /*
-            if( ledpos[i] == 0 && LedBrightness[i] > LED_FULL_LOW_LEVEL){
-                emit log("Step2 Failed, LED"+QString::number(i+1)+"should be mid");
-                return -1;
-            }
-            */
-        }
-        //if( full_cnt <= 0) {
-            //emit log(QString::number(mLedAnimationIndex+1)+" OK");
-            mLedAnimationIndex++;
-        //}
-#endif
-
-#if 0
-        if( LedBrightness[mLedAnimationIndex] > LED_FULL_LOW_LEVEL){
-            //emit log("To LED"+QString::number(mLedAnimationIndex+1));
-            for( int j=1; j<=5; j++ ){ //the last 5 or < 5 led is full
-                if( (mLedAnimationIndex - j) >= 0){
-                    if( LedBrightness[mLedAnimationIndex-j] < LED_FULL_LOW_LEVEL){
-                        emit log("Step2 Failed, LED"+QString::number(mLedAnimationIndex-j+1)+" is not in right animation");
-                        return -1;
-                    }else{
-                        //emit log(","+QString::number(mLedAnimationIndex-j+1));
-                    }
-                }else{
-                    break;
-                }
-            }
-            mLedAnimationIndex++;
         }
 #endif
 
@@ -757,6 +753,7 @@ int TesterThread::testLedAnimationLoop()
             return 1;
         }
         break;
+#endif
     }
 
     }

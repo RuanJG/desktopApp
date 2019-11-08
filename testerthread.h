@@ -61,6 +61,7 @@ class TesterRecord{
 public:
     int errorCode;
     QString errorCodeString;
+    int errorCodeParameter;
     QString date;
     QString QRcode;
     float VDD;
@@ -157,7 +158,6 @@ private:
 
 };
 
-
 #define setNormalMode() sendcmd(PC_TAG_CMD_SWITCHES_TESTMODE,0xff)
 #define setTest2Mode() sendcmd(PC_TAG_CMD_SWITCHES_TESTMODE,2)
 #define setTest3Mode() sendcmd(PC_TAG_CMD_SWITCHES_TESTMODE,3)
@@ -182,5 +182,7 @@ private:
 #define setVmeterReadStart() sendcmd(PC_TAG_CMD_VMETER_READ,0x1)
 #define setVmeterReadStop() sendcmd(PC_TAG_CMD_VMETER_READ,0x0)
 #define setAlloff() { setVmeterReadStop();setLedCaptureStop();setNormalMode(); mRelayStatus=0;sendcmd(PC_TAG_CMD_SWITCH,mRelayStatus); setMeasureNone();}
+
+
 
 #endif // TESTERTHREAD_H
