@@ -39,21 +39,25 @@
 
 
 //LED brightness range
-#define LED_FULL_LOW_LEVEL 700000
-#define LED_MID_HIGH_LEVEL 350000
-#define LED_MID_LOW_LEVEL  150000
-#define LED_ANIMATION_DIM_LOW_LEVEL  20000
-#define LED_ANIMATION_High_LOW_LEVEL  40000
+#define LED_FULL_LOW_LEVEL 650000
+#define LED_FULL_HIGH_LEVEL 850000
+#define LED_MID_HIGH_LEVEL 280000
+#define LED_MID_LOW_LEVEL  180000
+
+//animation brightness range
+#define LED_ANIMATION_MID_MAX_LEVEL  60000
+#define LED_ANIMATION_MID_MIN_LEVEL  20000
+#define LED_ANIMATION_HIGH_LOW_LEVEL  200000
 
 //Measure value range
-#define VDD_MAX_V_LEVEL 3.61
-#define VDD_MIN_V_LEVEL 3.40
+#define VDD_MAX_V_LEVEL 3.63
+#define VDD_MIN_V_LEVEL 3.38
 #define LED_FULL_MAX_V_LEVEL 0.9
-#define LED_FULL_MIN_V_LEVEL 0.7
+#define LED_FULL_MIN_V_LEVEL 0.74
 #define LED_MID_MAX_V_LEVEL 0.3
 #define LED_MID_MIN_V_LEVEL 0.2
-#define RLOAD_MAX_A_LEVEL 0.2
-#define RLOAD_MIN_A_LEVEL 0.1
+#define RLOAD_MAX_A_LEVEL 0.16
+#define RLOAD_MIN_A_LEVEL 0.14
 
 
 
@@ -61,7 +65,7 @@ class TesterRecord{
 public:
     int errorCode;
     QString errorCodeString;
-    int errorCodeParameter;
+    QString errorCodeParameter;
     QString date;
     QString QRcode;
     float VDD;
@@ -112,13 +116,13 @@ public:
     void checkDebug();
 
 signals:
-    void sendSerialCmd(int id, unsigned char* data, int len);
+    void sendSerialCmd(int id, QByteArray cmd);
     void log(QString str);
     void result(TesterRecord res);
     void error(QString errorStr);
 
 public slots:
-    void update_data(int tag, unsigned char *data);
+    void update_data(int tag, QByteArray bytes);
     void debug_step(bool start);
     void testThread_start(bool start);
     void testThread_exit();
@@ -181,7 +185,7 @@ private:
 #define setLedCaptureStop() sendcmd(PC_TAG_CMD_CAPTURE_EN,0x0)
 #define setVmeterReadStart() sendcmd(PC_TAG_CMD_VMETER_READ,0x1)
 #define setVmeterReadStop() sendcmd(PC_TAG_CMD_VMETER_READ,0x0)
-#define setAlloff() { setVmeterReadStop();setLedCaptureStop();setNormalMode(); mRelayStatus=0;sendcmd(PC_TAG_CMD_SWITCH,mRelayStatus); setMeasureNone();}
+#define setAlloff() { setVmeterReadStop();setLedCaptureStop();setNormalMode(); mRelayStatus = 0;sendcmd(PC_TAG_CMD_SWITCH,mRelayStatus); setMeasureNone();}
 
 
 

@@ -30,21 +30,21 @@ public:
 
 signals:
     void leftDebug_step(bool start);
-    void leftUpdate_tester_data(int tag, unsigned char *data);
+    void leftUpdate_tester_data(int tag, QByteArray bytes);
     void leftTestThread_start(bool start);
     void leftTestThread_exit();
     void rightDebug_step(bool start);
     void rightTestThread_start(bool start);
     void rightTestThread_exit();
-    void rightUpdate_tester_data(int tag, unsigned char *data);
+    void rightUpdate_tester_data(int tag, QByteArray bytes);
 
 private slots:
-    void leftTesterThread_sendSerialCmd(int id, unsigned char *data, int len);
+    void leftTesterThread_sendSerialCmd(int id, QByteArray cmd);
     void leftTesterThread_log(QString str);
     void leftTesterThread_result(TesterRecord res);
     void leftTesterThread_error(QString errorStr);
 
-    void rightTesterThread_sendSerialCmd(int id, unsigned char *data, int len);
+    void rightTesterThread_sendSerialCmd(int id, QByteArray cmd);
     void rightTesterThread_log(QString str);
     void rightTesterThread_result(TesterRecord res);
     void rightTesterThread_error(QString errorStr);
@@ -121,6 +121,7 @@ private:
         TesterThread *TesterThread;
         QString QRcode;
         QString id;
+        int mLedBrightness[12];
     }TestTargetControler_t;
 
     TestTargetControler_t mLeftTester;
@@ -131,7 +132,7 @@ private:
     QFile mTxtfile;
     QMutex mDataMutex;
     QSettings mSetting;
-    QMap<QString,quint32> mSerialMap;
+    QMap<QString,QString> mSerialMap;
     int mRelayStatus;
 
     void update_serial_info();
@@ -141,7 +142,7 @@ private:
     void close_serial(TestTargetControler_t *tester);
     void handle_Serial_Data(TestTargetControler_t *tester, QByteArray &bytes);
     void serial_send_packget(TestTargetControler_t *tester, const Chunk &chunk);
-    void scaner_send_cmd(TestTargetControler_t *tester, unsigned char *data, int len);
+    void scaner_send_cmd(TestTargetControler_t *tester,  unsigned char *data, int len);
     void sendcmd(int tag, int data);
     bool isTesterValiable(TestTargetControler_t *tester);
     void serial_send_PMSG(TestTargetControler_t *tester, unsigned char tag, unsigned char *data, int data_len);

@@ -53,8 +53,10 @@ void TesterThread::testThread_exit()
     mExitcmd = true;
 }
 
-void TesterThread::update_data(int tag, unsigned char *data)
+void TesterThread::update_data(int tag, QByteArray bytes)
 {
+    unsigned char *data = (unsigned char*) bytes.data();
+
     mMutex.lock();
     if( tag == PC_TAG_DATA_LED_BRIGHTNESS ){
         int *pdata = (int*)data;
@@ -77,15 +79,17 @@ void TesterThread::update_data(int tag, unsigned char *data)
         }
 #endif
     }else if( tag == PC_TAG_DATA_QRCODE){
-        QRcode = QString::fromLocal8Bit((char*)data);
+        QRcode = QString::fromLocal8Bit(bytes);
         QRcode_update  = true;
     }else if( tag == PC_TAG_DATA_VMETER){
+        float Vol;
+        memcpy( (char*)&Vol , data , 4);
 #if 0
         VMeter_value = *((float*)data);
         VMeter_update = true;
 #else
         VMeter_current_cnt++;
-        VMeter_value_current += *((float*)data);
+        VMeter_value_current += Vol;
         if( VMeter_current_cnt >= VMeter_update_mean_cnt){
             VMeter_value = VMeter_value_current/VMeter_current_cnt;
             VMeter_value_current = 0;
@@ -116,9 +120,16 @@ void TesterThread::debug_step(bool start)
 void TesterThread::sendcmd(int tag, int data)
 {
     unsigned char cmd[2];
+
+
     cmd[0]=tag;
     cmd[1]=data;
-    emit sendSerialCmd( BORAD_ID , cmd, 2);
+
+    QByteArray cmdBA;
+    cmdBA.append((char*)cmd,2);
+    //qDebug()<< "thread send cmd : 0x"+QByteArray((char*)cmd,2).toHex();
+    //emit sendSerialCmd( BORAD_ID , cmd, 2);
+    emit sendSerialCmd(BORAD_ID ,cmdBA);
 }
 
 
@@ -164,7 +175,7 @@ void TesterThread::run()
         testRes.date = QDateTime::currentDateTime().toString("yyyyMMddhhmmss");
         testRes.errorCode = ERRORCODE::E0;
         testRes.errorCodeString = "";
-        testRes.errorCodeParameter =0;
+        testRes.errorCodeParameter ="";
         mStartTest = false;
         emit log("AutoTest: Standby");
         while( !mStartTest )
@@ -181,25 +192,26 @@ void TesterThread::run()
 
 
     //first open all relay and switches
-        emit log("AutoTest: 1 close all relay and switches");
+        emit log("AutoTest: 1 关闭所有开关");
         setLedCaptureStop();
         mRelayStatus=0;
         sendcmd(PC_TAG_CMD_SWITCH,mRelayStatus);
         checkEven();
     //start Vmeter
-        emit log("AutoTest: 2 start VMeter");
+        emit log("AutoTest: 2  开启万用表");
         setVmeterReadStart();
     //press down the PCBA
-        emit log("AutoTest: 3 Load PCBA");
+        emit log("AutoTest: 3  等待压板");
         setAirCylinderOn();
         msleep(1000);
         checkEven();
     //scan the QRcode
-        emit log("AutoTest: 4 Scan QRcode");
+        emit log("AutoTest: 4  扫描二维码");
         cmd[0]=0x16; cmd[1] =0x54; cmd[2]=0x0D;
+        QByteArray scancmd = QByteArray((char*)cmd,3);
         QRcode_update = false;
         for( retry = 0, timeoutMs = 0;  retry < 3 ; retry++){
-            emit sendSerialCmd(SCANER_ID , cmd, 3);
+            emit sendSerialCmd(SCANER_ID ,scancmd);
             while(!QRcode_update){
                 msleep(10);
                 timeoutMs+=10;
@@ -211,7 +223,7 @@ void TesterThread::run()
         if( QRcode_update ) {
             testRes.QRcode = QRcode;
             emit log("get QRcode: "+ QRcode);
-            if( QRcode.length() != qrcodeExample.length() ){
+            if( QRcode.length() != qrcodeExample.length() || QRcode.left(11) != "CSWL-9711.1" ){
                 testRes.errorCode = ERRORCODE::E1;
                 testRes.errorCodeString = QRcode+tr(":二维码不符合要求");
             }
@@ -221,7 +233,9 @@ void TesterThread::run()
                 continue;
             }
         }else{
-            emit error(tr("扫描二维码超时"));
+            testRes.errorCode = ERRORCODE::E1;
+            testRes.errorCodeString = tr("扫描二维码超时");
+            emit result(testRes);
             setAlloff();
             continue;
         }
@@ -247,7 +261,7 @@ void TesterThread::run()
         setMeasureLED();
         setConnectMeasureVmeter();
         setLedCaptureStart();
-        msleep(100);
+        msleep(1000);
         //LedBrightness_update_mean_cnt = 10;
         //LedBrightness_update = false;
         testThread_clear_data(10,5);
@@ -261,10 +275,14 @@ void TesterThread::run()
         if( LedBrightness_update ) {
             for( int i=0; i<12; i++ ){
                 //TODO check the level in range;
-                if( LedBrightness[i] < LED_FULL_LOW_LEVEL ){
+                if( LedBrightness[i] < LED_FULL_LOW_LEVEL || LedBrightness[i] > LED_FULL_HIGH_LEVEL){
                     testRes.errorCode = ERRORCODE::E2;
-                    testRes.errorCodeParameter |= (1 << (i+1));
-                    testRes.errorCodeString += tr("LED%1 100%亮度(%2)过暗,").arg(i+1,LedBrightness[i]);
+                    if( testRes.errorCodeParameter.length() == 0 )
+                        testRes.errorCodeParameter += "LED";
+                    else
+                        testRes.errorCodeParameter += "&";
+                    testRes.errorCodeParameter += (QString::number(i+1));
+                    testRes.errorCodeString += tr("LED%1 100%亮度(%2)不在范围(%3~%4);").arg(i+1).arg(LedBrightness[i]).arg(LED_FULL_LOW_LEVEL).arg(LED_FULL_HIGH_LEVEL);
                 }
                 testRes.LedFullLevel[i] = LedBrightness[i];
             }
@@ -290,7 +308,7 @@ void TesterThread::run()
             testRes.VLedFull = VMeter_value;
             if( VMeter_value > LED_FULL_MAX_V_LEVEL || VMeter_value < LED_FULL_MIN_V_LEVEL){
                 testRes.errorCode = ERRORCODE::E3;
-                testRes.errorCodeString = tr("100%亮度时LED电压值(%1)不在范围[%2,%3],").arg(QString::number(VMeter_value,'f',4),QString::number(LED_FULL_MIN_V_LEVEL),QString::number(LED_FULL_MAX_V_LEVEL));
+                testRes.errorCodeString = tr("100%亮度时LED电压值(%1)不在范围[%2~%3]").arg(QString::number(VMeter_value,'f',4)).arg(QString::number(LED_FULL_MIN_V_LEVEL)).arg(QString::number(LED_FULL_MAX_V_LEVEL));
             }
             if( !keepTestEvenNG && testRes.errorCode != ERRORCODE::E0){
                 emit result(testRes);
@@ -325,7 +343,7 @@ void TesterThread::run()
             testRes.VDD = VMeter_value;
             if( VMeter_value > VDD_MAX_V_LEVEL || VMeter_value < VDD_MIN_V_LEVEL){
                 testRes.errorCode = ERRORCODE::E4;
-                testRes.errorCodeString = tr("VDD=（%1）不在范围[%2,%3]").arg(QString::number(VMeter_value,'f',4),QString::number(VDD_MIN_V_LEVEL),QString::number(VDD_MAX_V_LEVEL));
+                testRes.errorCodeString = tr("VDD=（%1）不在范围[%2~%3]").arg(QString::number(VMeter_value,'f',4)).arg(QString::number(VDD_MIN_V_LEVEL)).arg(QString::number(VDD_MAX_V_LEVEL));
             }
             if( !keepTestEvenNG && testRes.errorCode != ERRORCODE::E0){
                 emit result(testRes);
@@ -360,7 +378,7 @@ void TesterThread::run()
         setLedCaptureStart();
         setMeasureLED();
         setConnectMeasureVmeter();
-        msleep(100);
+        msleep(500);
         //LedBrightness_update_mean_cnt = 10;
         //LedBrightness_update = false;
         testThread_clear_data(10,5);
@@ -377,8 +395,8 @@ void TesterThread::run()
                 testRes.LedMidLevel[i] = LedBrightness[i];
                 if( LedBrightness[i] < LED_MID_LOW_LEVEL || LedBrightness[i] > LED_MID_HIGH_LEVEL ){
                     testRes.errorCode = ERRORCODE::E5;
-                    testRes.errorCodeParameter |= (1 << (i+1));
-                    testRes.errorCodeString += tr("LED%1 30%亮度(%2)不在范围[%3,%4]").arg(i+1,LedBrightness[i],LED_MID_LOW_LEVEL,LED_MID_HIGH_LEVEL);
+                    testRes.errorCodeParameter += (QString::number(i+1)+",");
+                    testRes.errorCodeString += tr("LED%1 30%亮度(%2)不在范围[%3~%4];").arg(i+1).arg(LedBrightness[i]).arg(LED_MID_LOW_LEVEL).arg(LED_MID_HIGH_LEVEL);
                 }
             }
             if( !keepTestEvenNG && testRes.errorCode != ERRORCODE::E0){
@@ -403,7 +421,7 @@ void TesterThread::run()
             testRes.VLedMid = VMeter_value;
             if( VMeter_value > LED_MID_MAX_V_LEVEL || VMeter_value < LED_MID_MIN_V_LEVEL){
                 testRes.errorCode = ERRORCODE::E6;
-                testRes.errorCodeString = tr("30%亮度时LED电压值=%1, ")+QString::number(VMeter_value,'f',4)+tr("，不符合要求");
+                testRes.errorCodeString = tr("30%亮度时LED电压值(%1)不在范围[%2~%3]").arg(QString::number(VMeter_value,'f',4)).arg(LED_MID_MIN_V_LEVEL).arg(LED_MID_MAX_V_LEVEL);
             }
             if( !keepTestEvenNG && testRes.errorCode != ERRORCODE::E0){
                 emit result(testRes);
@@ -481,7 +499,7 @@ void TesterThread::run()
         }
         if( !ledhalfon ){
             //testRes.errorCode = TesterThread::ERRORCODE::E9;
-            //testRes.errorCodeString =  tr("进行测试模式4后，LED亮度异常");
+            //testRes.errorCodeString =  tr("进行测试模式4后LED亮度异常");
             if( !keepTestEvenNG ){
                 //emit result(testRes);
                 setAlloff();
@@ -508,7 +526,7 @@ void TesterThread::run()
             emit log("VRload="+QString::number(VMeter_value,'f',6)+"; A="+QString::number(testRes.RloadCurrent,'f',6));
             if( testRes.RloadCurrent > RLOAD_MAX_A_LEVEL || testRes.RloadCurrent < RLOAD_MIN_A_LEVEL){
                 testRes.errorCode = ERRORCODE::E7;
-                testRes.errorCodeString = tr("负载电阻充电电流=%1，不在范围[%2,%3]").arg(QString::number(VMeter_value,'f',4),QString::number(RLOAD_MIN_A_LEVEL),QString::number(RLOAD_MAX_A_LEVEL));//+tr(", 不符合要求");
+                testRes.errorCodeString = tr("负载电阻充电电流(%1)不在范围[%2~%3]").arg(QString::number(VMeter_value,'f',4)).arg(QString::number(RLOAD_MIN_A_LEVEL)).arg(QString::number(RLOAD_MAX_A_LEVEL));//+tr(", 不符合要求");
             }
             if(!keepTestEvenNG &&  testRes.errorCode != ERRORCODE::E0){
                 emit result(testRes);
@@ -592,11 +610,12 @@ void TesterThread::run()
         //LedBrightness_update = false;
         testThread_clear_data(1,1);
         int res;
+        int animationTimeoutMs = 4000;
         bool checkRes;
 
         checkRes = false;
         testRes.LedAnimation = false;
-        while(ledAnimationTimeMs < 4000 )
+        while(ledAnimationTimeMs < animationTimeoutMs )
         {
             timeoutMs = 0;
             while(!LedBrightness_update){
@@ -611,7 +630,7 @@ void TesterThread::run()
                 LedBrightness_update = false; //!!!!!
                 if( -1 ==  res){
                     testRes.errorCode = ERRORCODE::E8;
-                    testRes.errorCodeString = tr("连接剃须刀后，LED动态效果测试失败");
+                    testRes.errorCodeString = tr("连接剃须刀后-LED动态效果测试失败");
                     checkRes = false;
                     break;
                 }
@@ -630,13 +649,17 @@ void TesterThread::run()
             //emit log("animation timeout "+QString::number(ledAnimationTimeMs));
         }
         if( !checkRes ){
-            if( ledAnimationTimeMs >= 6000 || timeoutMs >= 1000 ){
-                emit error(tr("LED动态效果检测超时"));
+            setDisconnectShaver();
+            setLedCaptureStop();
+            if( ledAnimationTimeMs >= animationTimeoutMs || timeoutMs >= 1000 ){
                 setAlloff();
+                testRes.errorCode = ERRORCODE::E8;
+                testRes.errorCodeString = tr("LED动态效果检测超时");
+                emit result(testRes);
                 continue;
             }else{
-                emit result(testRes);
                 setAlloff();
+                emit result(testRes);
                 continue;
             }
         }
@@ -647,12 +670,12 @@ void TesterThread::run()
 
     //send the result and reset
         emit log("AutoTest: test Finish");
-        emit result(testRes);
         setPowerOff();
         msleep(poweroffMs);
         setAirCylinderOff();
         setAlloff();
         testThread_reset();
+        emit result(testRes);
     }
 
 }
@@ -681,10 +704,10 @@ int TesterThread::testLedAnimationLoop()
         break;
     }
     case 1:{
-        //check all mid light
+#if 0 //check all mid light
         checkOK = true;
         for( int i=0; i<12; i++ ){
-            if( LedBrightness[i] < LED_MID_LOW_LEVEL || LedBrightness[i] > LED_MID_HIGH_LEVEL) {
+            if( LedBrightness[i] < LED_ANIMATION_MID_MIN_LEVEL || LedBrightness[i] > LED_ANIMATION_MID_MAX_LEVEL) {
                 checkOK = false;
             }
         }
@@ -692,20 +715,22 @@ int TesterThread::testLedAnimationLoop()
             emit log("Step1 OK");
             mLedAnimationStep++;
         }
+#else
+        mLedAnimationStep++;
+#endif
         break;
     }
     case 2:{
         //check mid -> full
 
-#if 1
         if( mLedAnimationIndex == 0xfff) return 1;
 
         for( int i=0; i< 12; i++){
-            if( LedBrightness[i] < LED_ANIMATION_DIM_LOW_LEVEL ){
+            if( LedBrightness[i] < LED_ANIMATION_MID_MIN_LEVEL ){
                 emit log("Step2 Failed, LED"+QString::number(i+1)+"is too dim:"+QString::number(LedBrightness[i]));
                 return -1;
             }
-            if( LedBrightness[i] >= LED_ANIMATION_High_LOW_LEVEL ){
+            if( LedBrightness[i] >= LED_ANIMATION_HIGH_LOW_LEVEL ){
                 emit log("LED"+QString::number(i+1)+" checked.");
                 mLedAnimationIndex |= ( 1 << i);
             }
@@ -717,45 +742,7 @@ int TesterThread::testLedAnimationLoop()
         }
         break;
 
-#else
-        if( mLedAnimationIndex >= 12 ) return 1;
-#if 1
-        if( LedBrightness[mLedAnimationIndex] < LED_ANIMATION_High_LOW_LEVEL){
-            break;
-        }
-        unsigned char ledpos[12] = {0};
-        volatile int full_cnt = 0;
-        ledpos[mLedAnimationIndex] = 1;
-#if 1
-        for( int j=1; j<=0; j++ ){ //the last 5 or < 5 led is full
-            if( (mLedAnimationIndex - j) >= 0){
-                ledpos[mLedAnimationIndex-j] = 1;
-                full_cnt++;
-            }
-        }
-#else
-        full_cnt = 1;
-#endif
-        for( int i=0; i< 12; i++){
-            if( LedBrightness[i] < LED_ANIMATION_DIM_LOW_LEVEL ){
-                emit log("Step2 Failed, LED"+QString::number(i+1)+"is too dim:"+QString::number(LedBrightness[i]));
-                return -1;
-            }
-            if( ledpos[i] == 1 && LedBrightness[i] < LED_ANIMATION_High_LOW_LEVEL ){
-                emit log("Step2 Failed, LED"+QString::number(i+1)+"should be high");
-                return -1;
-            }
-        }
-#endif
-
-        if( mLedAnimationIndex >= 12 ) {
-            emit log("Step2 OK");
-            return 1;
-        }
-        break;
-#endif
     }
-
     }
 
 
