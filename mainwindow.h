@@ -49,6 +49,8 @@ private slots:
     void rightTesterThread_result(TesterRecord res);
     void rightTesterThread_error(QString errorStr);
 
+    void shutdownTimerTrigger();
+
     void on_serialconnectPushButton_clicked();
 
     void on_serialrescanPushButton_2_clicked();
@@ -107,6 +109,14 @@ private slots:
 
     void on_serialconnectPushButton_right_clicked();
 
+    void on_testResultpushButton_2_pressed();
+
+    void on_testResultpushButton_2_released();
+
+    void on_testResultpushButton_2_clicked();
+
+    void on_testResultpushButton_right_clicked();
+
 private:
     Ui::MainWindow *ui;
 
@@ -134,6 +144,7 @@ private:
     QSettings mSetting;
     QMap<QString,QString> mSerialMap;
     int mRelayStatus;
+    QTimer mShutdownTimer;
 
     void update_serial_info();
     bool saveDataToFile(TesterRecord res);

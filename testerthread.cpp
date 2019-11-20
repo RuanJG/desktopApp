@@ -605,7 +605,8 @@ void TesterThread::run()
         msleep(100);
         ledAnimationTimeMs = 0;
         mLedAnimationStep = 0;
-        mLedAnimationIndex = 0;
+        mLedAnimationFullIndex = 0;
+        mLedAnimationMidIndex = 0;
         //LedBrightness_update_mean_cnt = 4;
         //LedBrightness_update = false;
         testThread_clear_data(1,1);
@@ -704,14 +705,20 @@ int TesterThread::testLedAnimationLoop()
         break;
     }
     case 1:{
-#if 0 //check all mid light
-        checkOK = true;
-        for( int i=0; i<12; i++ ){
-            if( LedBrightness[i] < LED_ANIMATION_MID_MIN_LEVEL || LedBrightness[i] > LED_ANIMATION_MID_MAX_LEVEL) {
-                checkOK = false;
+#if 1 //check all mid light
+
+        for( int i=0; i< 12; i++){
+            if( LedBrightness[i] < LED_ANIMATION_MID_MIN_LEVEL ){
+                emit log("Step1 Failed, LED"+QString::number(i+1)+"is too dim:"+QString::number(LedBrightness[i]));
+                return -1;
+            }
+            if( LedBrightness[i] <= LED_ANIMATION_MID_MAX_LEVEL ){
+                //emit log("LED"+QString::number(i+1)+"mid checked.");
+                mLedAnimationMidIndex |= ( 1 << i);
             }
         }
-        if( checkOK ) {
+
+        if(  mLedAnimationMidIndex == 0xfff) {
             emit log("Step1 OK");
             mLedAnimationStep++;
         }
@@ -723,20 +730,20 @@ int TesterThread::testLedAnimationLoop()
     case 2:{
         //check mid -> full
 
-        if( mLedAnimationIndex == 0xfff) return 1;
+        if( mLedAnimationFullIndex == 0xfff ) return 1;
 
         for( int i=0; i< 12; i++){
             if( LedBrightness[i] < LED_ANIMATION_MID_MIN_LEVEL ){
                 emit log("Step2 Failed, LED"+QString::number(i+1)+"is too dim:"+QString::number(LedBrightness[i]));
                 return -1;
             }
-            if( LedBrightness[i] >= LED_ANIMATION_HIGH_LOW_LEVEL ){
-                emit log("LED"+QString::number(i+1)+" checked.");
-                mLedAnimationIndex |= ( 1 << i);
+            if( LedBrightness[i] > LED_ANIMATION_MID_MAX_LEVEL ){
+                //emit log("LED"+QString::number(i+1)+"full checked.");
+                mLedAnimationFullIndex |= ( 1 << i);
             }
         }
 
-        if( mLedAnimationIndex == 0xfff ) {
+        if( mLedAnimationFullIndex == 0xfff ) {
             emit log("Step2 OK");
             return 1;
         }

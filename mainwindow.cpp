@@ -11,7 +11,8 @@ MainWindow::MainWindow(QWidget *parent) :
     mTxtfile(),
     mDataMutex(),
     mSetting(qApp->applicationDirPath()+"\/Setting.ini",QSettings::IniFormat),
-    mSerialMap()
+    mSerialMap(),
+    mShutdownTimer()
 {
     ui->setupUi(this);
 
@@ -64,6 +65,7 @@ MainWindow::MainWindow(QWidget *parent) :
 
     update_serial_info();
 
+    connect( &mShutdownTimer, SIGNAL(timeout()),this,SLOT(shutdownTimerTrigger()));
 }
 
 MainWindow::~MainWindow()
@@ -104,6 +106,7 @@ bool MainWindow::saveDataToFile(TesterRecord res){
         mDataMutex.unlock();
         return false;
     }
+
 
     mTxtfile.seek( mTxtfile.size() );
 
@@ -194,15 +197,14 @@ void MainWindow::update_serial_info()
             mSerialMap.insert(serialPortInfo.portName(), tmpID);
             if( leftSerialId == tmpID){
                 ui->serialComboBox->setCurrentIndex(ui->serialComboBox->count()-1);
-            }
-            if( leftScanerID == tmpID ){
+            }else if( leftScanerID == tmpID ){
                 ui->scanerSerialcomboBox->setCurrentIndex(ui->scanerSerialcomboBox->count()-1);
-            }
-            if( rightSerialID == tmpID){
+            }else if( rightSerialID == tmpID){
                 ui->serialComboBox_right->setCurrentIndex(ui->serialComboBox_right->count()-1);
-            }
-            if( rightScanerID == tmpID){
+            }else if( rightScanerID == tmpID){
                 ui->scanerSerialcomboBox_right->setCurrentIndex(ui->scanerSerialcomboBox_right->count()-1);
+            }else{
+
             }
         }
 #if 1
@@ -367,7 +369,7 @@ void MainWindow::solt_mScanerSerial_Right_ReadReady()
         mRightTester.QRcode = QString::fromLocal8Bit(arr1.remove(index2,1));
         ui->consoleTextBrowser->append("right QR Code :"+mRightTester.QRcode);
         mRightTester.QRcodeBytes.clear();
-
+        ui->led4lineEdit_right_2->setText(mRightTester.QRcode);
         emit rightUpdate_tester_data(PC_TAG_DATA_QRCODE, mRightTester.QRcode.toLocal8Bit());
     }
 }
@@ -416,10 +418,9 @@ void MainWindow::solt_mScanerSerial_ReadReady()
         mLeftTester.QRcode = QString::fromLocal8Bit(arr1.remove(index2,1));
         ui->consoleTextBrowser->append("left QR Code :"+mLeftTester.QRcode);
         mLeftTester.QRcodeBytes.clear();
-
+        ui->led4lineEdit_3->setText(mLeftTester.QRcode);
         emit leftUpdate_tester_data(PC_TAG_DATA_QRCODE, mLeftTester.QRcode.toLocal8Bit());
     }
-
 }
 
 
@@ -509,6 +510,18 @@ void MainWindow::handle_Serial_Data( TestTargetControler_t* tester, QByteArray &
                         else ui->VRloadled4lineEdit_right->setText(QString::number(Vol,'f',4));
                     }else{
                         ui->consoleTextBrowser->append(testerTag+"Vmeter:"+QString::number(Vol,'f',4)+"V");
+                        if( Vol < 1.0 ){
+                            if( (Vol< LED_FULL_MAX_V_LEVEL && Vol > LED_FULL_MIN_V_LEVEL) || ( Vol < LED_MID_MAX_V_LEVEL && Vol > LED_MID_MIN_V_LEVEL) ){
+                                if( isLeftTester(tester) ) ui->VledlineEdit_14->setText(QString::number(Vol,'f',4));
+                                else ui->VledlineEdit_right->setText(QString::number(Vol,'f',4));
+                            }
+                        }else if( Vol < 4.0 ){
+                            if( isLeftTester(tester) ) ui->VddlineEdit_13->setText(QString::number(Vol,'f',4));
+                            else ui->VddlineEdit_right->setText(QString::number(Vol,'f',4));
+                        }else{
+                            if( isLeftTester(tester) ) ui->VRloadled4lineEdit_2->setText(QString::number(Vol,'f',4));
+                            else ui->VRloadled4lineEdit_right->setText(QString::number(Vol,'f',4));
+                        }
                     }
                 }else{
                     ui->consoleTextBrowser->append(testerTag+"Vmeter data error");
@@ -666,7 +679,8 @@ void MainWindow::leftTesterThread_result(TesterRecord res)
 
     ui->autoTesterConsoletextBrowser->append("Left Tester Result : E"+QString::number(res.errorCode));
     ui->autoTesterConsoletextBrowser->append(res.errorCodeString);
-    ui->erroecodeStringlabel_24->setText( res.errorCodeString );
+    ui->erroecodeStringlabel_24->setText( res.errorCodeString.left(30) );
+
 
     ui->startTestpushButton->setText(tr("开始"));
 
@@ -695,7 +709,7 @@ void MainWindow::rightTesterThread_result(TesterRecord res)
     }
 
     ui->autoTesterConsoletextBrowser->append("Right Tester Result : E"+QString::number(res.errorCode));
-    ui->erroecodeStringlabel_right->setText( res.errorCodeString );
+    ui->erroecodeStringlabel_right->setText( res.errorCodeString.left(30) );
 
     ui->startTestpushButton->setText(tr("开始"));
 
@@ -711,7 +725,7 @@ void MainWindow::leftTesterThread_error(QString errorStr)
     ui->testResultpushButton_2->setText(tr("测试错误"));
     ui->testResultpushButton_2->setStyleSheet("color: red");
     ui->autoTesterConsoletextBrowser->append("Left Tester Error: "+errorStr);
-    ui->erroecodeStringlabel_24->setText(errorStr);
+    ui->erroecodeStringlabel_24->setText(errorStr.left(30));
     //QMessageBox::warning(this,tr("测试错误"),errorStr);
     ui->startTestpushButton->setText(tr("开始"));
 
@@ -729,7 +743,7 @@ void MainWindow::rightTesterThread_error(QString errorStr)
     ui->autoTesterConsoletextBrowser->append("Right Tester Error: "+errorStr);
     ui->autoTesterConsoletextBrowser->append(errorStr);
     //QMessageBox::warning(this,tr("测试错误"),errorStr);
-    ui->erroecodeStringlabel_right->setText(errorStr);
+    ui->erroecodeStringlabel_right->setText(errorStr.left(30));
     ui->startTestpushButton->setText(tr("开始"));
 
     if( !mLeftTester.TesterThread->mStartTest ){
@@ -1185,5 +1199,47 @@ void MainWindow::on_serialconnectPushButton_right_clicked()
             ui->serialconnectPushButton_right->setText(tr("断开"));
             ui->testResultpushButton_right->setText(tr("待测"));
         }
+    }
+}
+
+void MainWindow::on_testResultpushButton_2_pressed()
+{
+    //mShutdownTimer.start(2000);
+}
+
+void MainWindow::on_testResultpushButton_2_released()
+{
+    //mShutdownTimer.stop();
+}
+
+void MainWindow::shutdownTimerTrigger()
+{
+    QMessageBox Msg(QMessageBox::Question, tr("警告"), tr("是否关闭电脑？"),QMessageBox::Yes | QMessageBox::No, NULL );
+    if(  Msg.exec() == QMessageBox::Yes){
+        QProcess *process = new QProcess(this);
+        QStringList arguments;
+        arguments << "-s" <<"-f" << "-t 0";
+        process->start("C:\\Windows\\System32\\shutdown.exe",arguments);
+        process->waitForFinished(1000000);
+        qDebug()<< process->errorString()+","+process->errorString();
+        delete process;
+    }else{
+        // ignore
+    }
+}
+
+void MainWindow::on_testResultpushButton_2_clicked()
+{
+    if( mLeftTester.Serialport != NULL || mLeftTester.Scanerserialport != NULL)
+    {
+        update_serial_info();
+    }
+}
+
+void MainWindow::on_testResultpushButton_right_clicked()
+{
+    if( mRightTester.Serialport != NULL || mRightTester.Scanerserialport != NULL)
+    {
+        update_serial_info();
     }
 }

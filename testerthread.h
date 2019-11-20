@@ -47,7 +47,7 @@
 //animation brightness range
 #define LED_ANIMATION_MID_MAX_LEVEL  60000
 #define LED_ANIMATION_MID_MIN_LEVEL  20000
-#define LED_ANIMATION_HIGH_LOW_LEVEL  200000
+//#define LED_ANIMATION_HIGH_LOW_LEVEL  650000
 
 //Measure value range
 #define VDD_MAX_V_LEVEL 3.63
@@ -136,7 +136,8 @@ private:
     QString QRcode;
     volatile int mRelayStatus;
     volatile int mLedAnimationStep;
-    volatile int mLedAnimationIndex;
+    volatile int mLedAnimationFullIndex;
+    volatile int mLedAnimationMidIndex;
 
 
     volatile int ledhalfonTimeoutMs;
