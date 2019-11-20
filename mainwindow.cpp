@@ -1216,30 +1216,60 @@ void MainWindow::shutdownTimerTrigger()
 {
     QMessageBox Msg(QMessageBox::Question, tr("警告"), tr("是否关闭电脑？"),QMessageBox::Yes | QMessageBox::No, NULL );
     if(  Msg.exec() == QMessageBox::Yes){
-        QProcess *process = new QProcess(this);
-        QStringList arguments;
-        arguments << "-s" <<"-f" << "-t 0";
-        process->start("C:\\Windows\\System32\\shutdown.exe",arguments);
-        process->waitForFinished(1000000);
-        qDebug()<< process->errorString()+","+process->errorString();
-        delete process;
+        MySystemShutDown();
     }else{
         // ignore
     }
 }
 
+#include "qt_windows.h"
+
+bool MainWindow::MySystemShutDown()
+{
+    HANDLE hToken;
+    TOKEN_PRIVILEGES tkp;
+
+    //获取进程标志
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken))
+         return false;
+
+    //获取关机特权的LUID
+    LookupPrivilegeValue(NULL, SE_SHUTDOWN_NAME,    &tkp.Privileges[0].Luid);
+    tkp.PrivilegeCount = 1;
+    tkp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+
+    //获取这个进程的关机特权
+    AdjustTokenPrivileges(hToken, false, &tkp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
+    if (GetLastError() != ERROR_SUCCESS) return false;
+
+    // 强制关闭计算机
+    if ( !ExitWindowsEx(EWX_SHUTDOWN | EWX_FORCE, 0))
+          return false;
+    return true;
+}
+
 void MainWindow::on_testResultpushButton_2_clicked()
 {
-    if( mLeftTester.Serialport != NULL || mLeftTester.Scanerserialport != NULL)
+    if( mLeftTester.Serialport == NULL || mLeftTester.Scanerserialport == NULL)
     {
-        update_serial_info();
+        //update_serial_info();
     }
 }
 
 void MainWindow::on_testResultpushButton_right_clicked()
 {
-    if( mRightTester.Serialport != NULL || mRightTester.Scanerserialport != NULL)
+    if( mRightTester.Serialport == NULL || mRightTester.Scanerserialport == NULL)
     {
-        update_serial_info();
+        //update_serial_info();
+    }
+}
+
+void MainWindow::on_shutdownpushButton_clicked()
+{
+    QMessageBox Msg(QMessageBox::Question, tr("警告"), tr("是否关闭电脑？"),QMessageBox::Yes | QMessageBox::No, NULL );
+    if(  Msg.exec() == QMessageBox::Yes){
+        MySystemShutDown();
+    }else{
+        // ignore
     }
 }

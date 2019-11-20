@@ -117,6 +117,8 @@ private slots:
 
     void on_testResultpushButton_right_clicked();
 
+    void on_shutdownpushButton_clicked();
+
 private:
     Ui::MainWindow *ui;
 
@@ -157,6 +159,7 @@ private:
     void sendcmd(int tag, int data);
     bool isTesterValiable(TestTargetControler_t *tester);
     void serial_send_PMSG(TestTargetControler_t *tester, unsigned char tag, unsigned char *data, int data_len);
+    bool MySystemShutDown();
 };
 
 #endif // MAINWINDOW_H

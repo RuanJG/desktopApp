@@ -25,6 +25,7 @@ HEADERS  += mainwindow.h \
     libs/iapmaster.h \
     libs/uartcoder.h \
     libs/util.h \
-    testerthread.h
+    testerthread.h \
+    D:/Qt/Qt5.6.2/5.6/mingw49_32/include/QtCore/qt_windows.h
 
 FORMS    += mainwindow.ui
