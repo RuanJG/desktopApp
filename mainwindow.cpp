@@ -225,13 +225,13 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *e)
                 QList<UnitsBox> boxlist = mDataBaseHelper.findBoxbyBoxCode(mCurrentBox.boxQRcode);
 
                 if(boxlist.size() > 0){
-                    //old box, ask for update or rescan
-                    bool askforReplace = false;
-                    QMessageBox Msg(QMessageBox::Question, tr("警告"), tr("此包装箱已经打包，是否替换更新？"),QMessageBox::Yes | QMessageBox::No, NULL );
-                    if( !askforReplace || Msg.exec() == QMessageBox::Yes){
+                    //old box, ask for update or rescan?
+                    //QMessageBox Msg(QMessageBox::Question, tr("警告"), tr("此包装箱已经记录，是否删除上次记录？"),QMessageBox::Yes | QMessageBox::No, NULL );
+                    //if( Msg.exec() == QMessageBox::Yes){
+                    if( true ){
                         //update box record
                         if( ! mDataBaseHelper.deleteBoxbyBoxcode(mCurrentBox.boxQRcode)){
-                            QMessageBox Msg(QMessageBox::Question, tr("警告"), tr("数据库删除记录失败，请重启软件"));
+                            QMessageBox Msg(QMessageBox::Question, tr("警告"), tr("此箱号已保存在数据库，现在删除记录失败，请重启软件"));
                             mStepIndex = 3;
                             updateStep();
                             return true;
@@ -260,11 +260,17 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *e)
                     mStringData.remove(0,1);
                     mStringData.remove(BARCODE_LENGTH,mStringData.length()-BARCODE_LENGTH);
                     QString barcode = QString::fromLocal8Bit(mStringData);
-                    if( 0 > mCurrentBox.RRCcodeList.indexOf(barcode) ){
+                    if( -1 == mCurrentBox.RRCcodeList.indexOf(barcode) ){
                         //check whether it is existed ? or ignore
                         QList<UnitsBox> boxlist = mDataBaseHelper.findBoxbyUnitCode(barcode);
                         if( boxlist.size() > 0 ){
                             //TODO ignore or delete record exited?
+                            if( ! mDataBaseHelper.deleteBoxbyBoxcode(boxlist.at(0).boxQRcode)){
+                                QMessageBox Msg(QMessageBox::Question, tr("警告"), tr("此产品已保存在数据库，现在删除记录失败，请重启软件"));
+                                mStepIndex = 3;
+                                updateStep();
+                                return true;
+                            }
                             mCurrentBox.RRCcodeList.append( barcode );
                             mCurrentBox.RRCcount++;
                         }else{
@@ -354,8 +360,13 @@ void MainWindow::on_exportpushButton_clicked()
 
     filename = fileNames.at(0);
 
-    QString POcode = ui->POlineEdit_3->text();
-    if( POcode.length() == 0) POcode = "*";
+    //QString POcode = ui->POlineEdit_3->text();
+    //if( POcode.length() == 0) POcode = "*";
+
+    QString POcode = "*";
+
+    QMessageBox::information(this,tr("提示"),tr("数据导出时需要一定时间，请耐心等待，不要关闭软件"));
+    ui->importtextBrowser_2->append(tr("正在读取数据...."));
 
     if( mDataBaseHelper.exportToTxtfile(filename,POcode) )
     {
@@ -517,7 +528,143 @@ void MainWindow::on_boxlistfilechoisepushButton_3_clicked()
     delete fileDialog;
 }
 
-void MainWindow::on_boxlisttxtfileimportpushButton_4_clicked()
+
+void MainWindow::findoutNotExitBarcode()
+{
+    //read txt file , update to the Database
+    QFile txtfile;
+    QFile savefile;
+    QString record;
+    QStringList recordSection;
+    QString Barcode = "";
+
+
+    txtfile.setFileName(ui->boxcodelisttxtfilelineEdit_2->text());
+    if( !txtfile.open(QIODevice::ReadWrite | QIODevice::Text) ){
+        QMessageBox::warning(this,"Error","打开数据文档失败");
+        txtfile.close();
+        return ;
+    }
+    txtfile.seek(0);
+
+    savefile.setFileName("NotExitBarcodeList.txt");
+    if( !savefile.open(QIODevice::ReadWrite | QIODevice::Text) ){
+        QMessageBox::warning(this,"Error","打开保存文档失败");
+        savefile.close();
+        return ;
+    }
+    savefile.seek(0);
+
+
+    QMessageBox::information(this,tr("提示"),tr("对比数据时需要一定时间，请耐心等待，不要关闭软件"));
+
+    QString str;
+    int totallyCount = 0;
+    ui->importtextBrowser_2->clear();
+
+    while( txtfile.pos() < txtfile.size() ){
+        Barcode = "";
+        record = tr(txtfile.readLine());
+        //qDebug()<<record;
+        recordSection = record.split(QRegExp("[, ;\t\n\r]"),QString::SkipEmptyParts);
+        if( recordSection.size() <= 0){
+            QMessageBox::information(this,tr("提示"),tr("有未知的行，停止对比"));
+            break;
+        }
+        for( int i=0; i< recordSection.size(); i++){
+            str = recordSection.at(i);
+            if( str.length() ==  BARCODE_LENGTH){
+                Barcode = str;
+                //qDebug()<< str;
+            }else{
+                //ignore useless imformation
+            }
+        }
+        if( Barcode.length() == BARCODE_LENGTH ){
+            QList<UnitsBox> boxlist = mDataBaseHelper.findBoxbyUnitCode(Barcode);
+            if( boxlist.size() > 0 ){
+                qDebug()<< str+" is exited";
+            }else{
+                savefile.write(QString(Barcode+"\n").toLocal8Bit());
+                qDebug()<< str+" is not exited";
+            }
+        }
+    }
+    txtfile.close();
+    savefile.flush();
+    savefile.close();
+    QMessageBox::information(this,tr("提示"),tr("未存在的Barcode保存在%1").arg(savefile.fileName()));
+}
+
+void MainWindow::findoutRepeatBarcode()
+{
+    //read txt file , update to the Database
+    QFile txtfile;
+    QFile savefile;
+    QString record;
+    QStringList recordSection;
+    QStringList Barcodelist;
+    QString Barcode = "";
+
+
+    txtfile.setFileName(ui->boxcodelisttxtfilelineEdit_2->text());
+    if( !txtfile.open(QIODevice::ReadWrite | QIODevice::Text) ){
+        QMessageBox::warning(this,"Error","打开数据文档失败");
+        txtfile.close();
+        return ;
+    }
+    txtfile.seek(0);
+
+    savefile.setFileName("NotRepeatBarcodeList.txt");
+    if( !savefile.open(QIODevice::ReadWrite | QIODevice::Text) ){
+        QMessageBox::warning(this,"Error","打开保存文档失败");
+        savefile.close();
+        return ;
+    }
+    savefile.seek(0);
+
+
+    QMessageBox::information(this,tr("提示"),tr("对比数据时需要一定时间，请耐心等待，不要关闭软件"));
+
+    QString str;
+    int totallyCount = 0;
+    ui->importtextBrowser_2->clear();
+
+    while( txtfile.pos() < txtfile.size() ){
+        Barcode = "";
+        record = tr(txtfile.readLine());
+        //qDebug()<<record;
+        recordSection = record.split(QRegExp("[, ;\t\n\r]"),QString::SkipEmptyParts);
+        if( recordSection.size() <= 0){
+            QMessageBox::information(this,tr("提示"),tr("有未知的行，停止对比"));
+            break;
+        }
+        for( int i=0; i< recordSection.size(); i++){
+            str = recordSection.at(i);
+            if( str.length() ==  BARCODE_LENGTH){
+                Barcode = str;
+                //qDebug()<< str;
+            }else{
+                //ignore useless imformation
+            }
+        }
+        if( Barcode.length() == BARCODE_LENGTH ){
+            if( -1 == Barcodelist.indexOf(Barcode) ){
+                Barcodelist.append(Barcode);
+                savefile.write(QString(Barcode+"\n").toLocal8Bit());
+            }else{
+                qDebug()<< str+" is repeat";
+            }
+
+        }
+    }
+    txtfile.close();
+    savefile.flush();
+    savefile.close();
+    QMessageBox::information(this,tr("提示"),tr("未存在的Barcode保存在%1").arg(savefile.fileName()));
+}
+
+void MainWindow::setPODateNA()
 {
     //read txt file , update to the Database
     QFile txtfile;
@@ -527,6 +674,10 @@ void MainWindow::on_boxlisttxtfileimportpushButton_4_clicked()
     QString POcode = ui->poCodeimportlineEdit_3->text();
     QString DelievryDate = ui->dateEdit->text();
     QString Barcode = "";
+
+    //findoutNotExitBarcode();
+    //findoutRepeatBarcode();
+    //return;
 
     if( POcode.length() != POCODE_LENGTH ){
         QMessageBox::warning(this,"Error",tr("请先填写订单号"));
@@ -551,7 +702,105 @@ void MainWindow::on_boxlisttxtfileimportpushButton_4_clicked()
 
     while( txtfile.pos() < txtfile.size() ){
         record = QString(txtfile.readLine());
-        recordSection = record.split(QRegExp("[,\t\n\r]"),QString::SkipEmptyParts);
+        recordSection = record.split(QRegExp("[, ;\t\n\r]"),QString::SkipEmptyParts);
+        if( recordSection.size() <= 0){
+            continue;
+        }
+        BoxCode = "";
+        POcode = ui->poCodeimportlineEdit_3->text();
+        DelievryDate = ui->dateEdit->date().toString("yyyyMMdd");
+
+        for( int i=0; i< recordSection.size(); i++){
+            str = recordSection.at(i);
+            qDebug()<< str;
+            if( str.length() == POCODE_LENGTH ){
+                POcode = str;
+            }else if( str.length() == BOXCODE_LENGTH ) {
+                BoxCode = str;
+            }else if( str.length() == DELIEVERY_DATE_LENGTH){
+                DelievryDate = str;
+            }else if( str.length() ==  BARCODE_LENGTH){
+                Barcode = str;
+            }else{
+                //ignore useless imformation
+            }
+        }
+
+        if( BOXCODE_LENGTH != BoxCode.length()){
+            continue;
+        }
+
+        totallyCount++;
+
+
+        //save to database, [boxcode,date,po] each line
+        QList<UnitsBox> boxlist = mDataBaseHelper.findBoxbyBoxCode(BoxCode);
+        if( boxlist.size() > 0 ){
+            //exist , update the box record
+            UnitsBox box= boxlist.at(0);
+            box.poCode = "";
+            box.delieverDate = "";
+            if( !mDataBaseHelper.updateBox(box) ){
+                ui->importtextBrowser_2->append(QString::number(totallyCount)+","+BoxCode+",修改到数据库失败");
+                QMessageBox::warning(this,tr("错误"),tr("更新订单信息到数据库失败，请检查错误再重试"));
+                txtfile.close();
+                return;
+            }else{
+                importCount++;
+            }
+        }else{
+            QMessageBox::warning(this,tr("错误"),tr("没有找到这箱号%1，请检查错误再重试").arg(BoxCode));
+            txtfile.close();
+            return;
+        }
+    }
+
+    ui->importtextBrowser_2->append(tr("共读到%1个箱号，成功导入%2个箱号到数据库中").arg(QString::number(totallyCount),QString::number(importCount)));
+    txtfile.close();
+    QMessageBox::warning(this,tr("完成"),tr("共读到%1个箱号，成功导入%2个箱号到数据库中").arg(QString::number(totallyCount),QString::number(importCount)));
+
+}
+
+void MainWindow::on_boxlisttxtfileimportpushButton_4_clicked()
+{
+    //read txt file , update to the Database
+    QFile txtfile;
+    QString record;
+    QStringList recordSection;
+    QString BoxCode;
+    QString POcode = ui->poCodeimportlineEdit_3->text();
+    QString DelievryDate = ui->dateEdit->text();
+    QString Barcode = "";
+
+    //findoutNotExitBarcode();
+    //findoutRepeatBarcode();
+    //setPODateNA();
+    //return;
+
+    if( POcode.length() != POCODE_LENGTH ){
+        QMessageBox::warning(this,"Error",tr("请先填写订单号"));
+        return ;
+    }
+
+    txtfile.setFileName(ui->boxcodelisttxtfilelineEdit_2->text());
+    if( !txtfile.open(QIODevice::ReadWrite | QIODevice::Text) ){
+        QMessageBox::warning(this,"Error","打开数据文档失败");
+        txtfile.close();
+        return ;
+    }
+    txtfile.seek(0);
+
+    ui->importtextBrowser_2->append(tr("开始合并数据..."));
+    QMessageBox::information(this,tr("提示"),tr("数据合并时需要一定时间，请耐心等待，不要关闭软件"));
+
+    QString str;
+    int totallyCount = 0;
+    int importCount = 0;
+    ui->importtextBrowser_2->clear();
+
+    while( txtfile.pos() < txtfile.size() ){
+        record = QString(txtfile.readLine());
+        recordSection = record.split(QRegExp("[, ;\t\n\r]"),QString::SkipEmptyParts);
         if( recordSection.size() <= 0){
             continue;
         }
@@ -777,4 +1026,146 @@ void MainWindow::on_mergerLocaldbpushButton_clicked()
 void MainWindow::on_localModecheckBox_toggled(bool checked)
 {
     mUsingLocalDB = checked;
+}
+
+void MainWindow::on_pushButton_clicked()
+{
+    QDir mdir;
+    QString filedirPath = QDir::currentPath()+"/Data";
+    QString filename =QDir::toNativeSeparators( filedirPath+"/"+"Barcode_Record.txt" );
+    mdir.mkpath(filedirPath);
+
+    QString POcode = ui->POlineEdit_3->text();
+    QFileDialog *fileDialog = new QFileDialog(this);
+    //QStringList nameFilter;
+    //nameFilter << "*.txt" << "*.*";
+    fileDialog->setWindowTitle(tr("选择导出文件路径"));
+    fileDialog->setDirectory(QDir::currentPath());
+    //fileDialog->setNameFilters(nameFilter);
+    fileDialog->fileSelected(POcode+"BarcodeList.txt");
+    fileDialog->setFileMode(QFileDialog::AnyFile);
+    fileDialog->setViewMode(QFileDialog::Detail);
+
+    QStringList fileNames;
+    if (fileDialog->exec()) {
+        fileNames = fileDialog->selectedFiles();
+    }
+    delete fileDialog;
+
+    if( fileNames.size() <= 0 ) return;
+
+    filename = fileNames.at(0);
+
+
+    if( POcode.length() == 0) POcode = "*";
+
+    QMessageBox::information(this,tr("提示"),tr("数据导出时需要一定时间，请耐心等待，不要关闭软件"));
+    ui->importtextBrowser_2->append(tr("正在读取数据...."));
+
+    if( mDataBaseHelper.export_PO_Barcode_ToTxtfile(filename,POcode) )
+    {
+        QMessageBox::information(this,tr("数据导出"),tr("数据已保存在")+filename);
+    }else{
+        QMessageBox::warning(this,tr("数据导出"),tr("数据导出失败"));
+    }
+}
+
+void MainWindow::on_pushButton_2_clicked()
+{
+    //read database backup file , update to the Database
+
+    QFile txtfile;
+    QString record;
+    QStringList recordSection;
+
+    QFileDialog *fileDialog = new QFileDialog(this);
+    QStringList nameFilter;
+    QString filename;
+    nameFilter << "*.txt" << "*.*";
+    fileDialog->setWindowTitle(tr("数据库文件"));
+    fileDialog->setDirectory(QDir::currentPath());
+    fileDialog->setNameFilters(nameFilter);
+    fileDialog->setFileMode(QFileDialog::ExistingFiles);
+    fileDialog->setViewMode(QFileDialog::Detail);
+
+    QStringList fileNames;
+    if (fileDialog->exec()) {
+        fileNames = fileDialog->selectedFiles();
+    }
+    delete fileDialog;
+
+    if( fileNames.size() <= 0 ) return;
+
+    filename = fileNames.at(0);
+
+
+    txtfile.setFileName(filename);
+    if( !txtfile.open(QIODevice::ReadWrite | QIODevice::Text) ){
+        QMessageBox::warning(this,"Error","打开数据文档失败");
+        txtfile.close();
+        return ;
+    }
+    txtfile.seek(0);
+
+    ui->importtextBrowser_2->append(tr("开始读取数据..."));
+    QMessageBox::information(this,tr("提示"),tr("数据读取时需要一定时间，请耐心等待，不要关闭软件"));
+
+    QString str;
+    int totallyCount = 0;
+    int importCount = 0;
+    ui->importtextBrowser_2->clear();
+
+
+    UnitsBox newbox;
+    bool ok;
+
+    while( txtfile.pos() < txtfile.size() ){
+        record = QString(txtfile.readLine());
+        recordSection = record.split(QRegExp("[ ;\t\n\r]"),QString::SkipEmptyParts);
+        if( recordSection.size() != 6){
+            ui->importtextBrowser_2->append(tr("有不良数据：")+record);
+            continue;
+        }
+        newbox.boxQRcode = recordSection.at(0);
+        newbox.RRCcount =  QString(recordSection.at(1)).toInt(&ok);
+        newbox.RRCcodeList = QString(recordSection.at(2)).split(QRegExp("[,]"),QString::SkipEmptyParts);
+        newbox.packDate = recordSection.at(3);
+        newbox.poCode = recordSection.at(4);
+        newbox.delieverDate = recordSection.at(5);
+
+        if( !ok || newbox.poCode.length() != POCODE_LENGTH ||  newbox.boxQRcode.length() != BOXCODE_LENGTH\
+                || newbox.packDate.length() != DELIEVERY_DATE_LENGTH || newbox.delieverDate.length() != DELIEVERY_DATE_LENGTH \
+                || newbox.RRCcodeList.size() != newbox.RRCcount || QString(newbox.RRCcodeList.at(0)).length() != BARCODE_LENGTH){
+            ui->importtextBrowser_2->append(tr("有不良数据：")+record);
+            continue;
+        }
+
+        totallyCount++;
+        //save to database, [boxcode,date,po] each line
+        QList<UnitsBox> boxlist = mDataBaseHelper.findBoxbyBoxCode(newbox.boxQRcode);
+        if( boxlist.size() > 0 ){
+            //exist , update the box record
+            if( !mDataBaseHelper.updateBox(newbox) ){
+                ui->importtextBrowser_2->append(QString::number(totallyCount)+","+newbox.boxQRcode+":更新到数据库失败");
+                QMessageBox::warning(this,tr("错误"),tr("更新信息到数据库失败，请检查错误再重试"));
+                break;
+            }else{
+                importCount++;
+            }
+        }else{
+            if( !mDataBaseHelper.append(newbox) ){
+                ui->importtextBrowser_2->append(QString::number(totallyCount)+","+newbox.boxQRcode+",添加到数据库失败");
+                QMessageBox::warning(this,tr("错误"),tr("添加信息到数据库失败，请检查错误再重试"));
+                break;
+            }else{
+                //ui->importtextBrowser_2->append(QString::number(totallyCount)+","+BoxCode);
+                importCount++;
+            }
+        }
+    }
+
+    ui->importtextBrowser_2->append(tr("共读到%1个箱号，成功导入%2个箱号到数据库中").arg(QString::number(totallyCount),QString::number(importCount)));
+    txtfile.close();
+    QMessageBox::warning(this,tr("完成"),tr("共读到%1个箱号，成功导入%2个箱号到数据库中").arg(QString::number(totallyCount),QString::number(importCount)));
+
 }

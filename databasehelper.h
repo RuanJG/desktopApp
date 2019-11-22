@@ -200,7 +200,7 @@ public:
         file.seek(file.size());
 
         if( file.size() == 0 ){
-            QString title = "Boxcode,QTY,RRCcodeList,PackDate,POcode,DelieverDate\n";
+            QString title = "Boxcode;QTY;RRCcodeList;PackDate;POcode;DelieverDate\n";
             file.write(title.toLocal8Bit());
         }
 
@@ -208,13 +208,70 @@ public:
         while( sql_query.next()){
             //Boxcode text primary key, RRCcodeList text, Quantity int, PackDate text, POcode text, DelieverDate
             data = sql_query.record().value("Boxcode").toString();
-            data += "," + QString::number(sql_query.record().value("Quantity").toInt());
-            data += "," + sql_query.record().value("RRCcodeList").toString();
-            data += "," + sql_query.record().value("PackDate").toString();
-            data += "," + sql_query.record().value("POcode").toString();
-            data += "," + sql_query.record().value("DelieverDate").toString();
+            data += ";" + QString::number(sql_query.record().value("Quantity").toInt());
+            data += ";" + sql_query.record().value("RRCcodeList").toString();
+            data += ";" + sql_query.record().value("PackDate").toString();
+            data += ";" + sql_query.record().value("POcode").toString();
+            data += ";" + sql_query.record().value("DelieverDate").toString();
             data += "\n";
             file.write(data.toLocal8Bit());
+        }
+
+        file.flush();
+        file.close();
+
+        return true;
+
+    }
+
+
+    bool export_PO_Barcode_ToTxtfile(QString filename, QString POcode)
+    {
+        if( !mDataBase.isOpen() ) return false;
+
+        QSqlQuery sql_query(mDataBase);
+
+        QString cmd ;
+        if( POcode == "*"){
+            cmd = QString("select * from BarcodeTable");
+        }else{
+            cmd = QString("select * from BarcodeTable where POcode='%1'").arg(POcode);
+        }
+        qDebug() << cmd;
+        if( !sql_query.exec(cmd) ){
+            return false;
+        }
+
+        QFile file;
+        file.setFileName(filename);
+        if( !file.open(QIODevice::ReadWrite | QIODevice::Text) ){
+            file.close();
+            return false;
+        }
+        file.seek(file.size());
+
+        if( file.size() == 0 ){
+            QString title = "Barcode;PO;Boxcode;AssemblyDate;DeliveryDate\n";
+            file.write(title.toLocal8Bit());
+        }
+
+        QString data;
+        QString PO;
+        QString Boxcode;
+        QString PackDate;
+        QString DelieveryDate;
+        QStringList barcodelist;
+        while( sql_query.next()){
+            //Boxcode text primary key, RRCcodeList text, Quantity int, PackDate text, POcode text, DelieverDate
+            PO =  sql_query.record().value("POcode").toString();
+            Boxcode = sql_query.record().value("Boxcode").toString();
+            PackDate = sql_query.record().value("PackDate").toString();
+            DelieveryDate = sql_query.record().value("DelieverDate").toString();
+            barcodelist = sql_query.record().value("RRCcodeList").toString().split(QRegExp("[,\t\n\r]"),QString::SkipEmptyParts);
+            for( int i=0; i<barcodelist.size(); i++){
+                data = barcodelist.at(i)+";"+PO+";"+Boxcode+";"+PackDate+";"+DelieveryDate+"\n";
+                file.write(data.toLocal8Bit());
+            }
         }
 
         file.flush();

@@ -18,7 +18,7 @@
     <item row="0" column="0">
      <widget class="QTabWidget" name="tabWidget">
       <property name="currentIndex">
-       <number>0</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="tab1">
        <attribute name="title">
@@ -414,9 +414,9 @@
               </spacer>
              </item>
              <item>
-              <widget class="QPushButton" name="exportpushButton">
+              <widget class="QPushButton" name="pushButton">
                <property name="text">
-                <string>导出数据</string>
+                <string>导出产品列表</string>
                </property>
               </widget>
              </item>
@@ -525,6 +525,20 @@
                 <widget class="QPushButton" name="mergerLocaldbpushButton">
                  <property name="text">
                   <string>上传本地数据到数据库服务器</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="exportpushButton">
+                 <property name="text">
+                  <string>导出/备份数据库</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="pushButton_2">
+                 <property name="text">
+                  <string>还原数据库</string>
                  </property>
                 </widget>
                </item>

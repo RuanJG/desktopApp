@@ -65,6 +65,10 @@ private slots:
 
     void on_localModecheckBox_toggled(bool checked);
 
+    void on_pushButton_clicked();
+
+    void on_pushButton_2_clicked();
+
 private:
     Ui::MainWindow *ui;
     volatile int mStepIndex;
@@ -82,6 +86,9 @@ private:
     bool isUsingLocalDB(DataBaseHelper *mdber);
     bool mergeLocalDBToRemote(QString localDBFileNmae);
     QString mLocalDataBaseFileName;
+    void findoutNotExitBarcode();
+    void findoutRepeatBarcode();
+    void setPODateNA();
 };
 
 
