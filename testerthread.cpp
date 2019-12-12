@@ -1,7 +1,7 @@
 #include "testerthread.h"
 #include <QDateTime>
 #include <QDebug>
-
+#include <QElapsedTimer>
 
 
 
@@ -149,7 +149,14 @@ void TesterThread::checkDebug()
 
 
 
+void TesterThread::Rmsleep(int ms)
+{
+    QElapsedTimer t;
+    t.start();
+    while(t.elapsed()<ms);
 
+    //msleep(ms);
+}
 
 
 
@@ -169,6 +176,7 @@ void TesterThread::run()
 
 
 
+
     while(true)
     {
         testRes = TesterRecord();
@@ -178,17 +186,19 @@ void TesterThread::run()
         testRes.errorCodeParameter ="";
         mStartTest = false;
         emit log("AutoTest: Standby");
+
+
         while( !mStartTest )
         {
             if( mExitcmd ){
                 return;
             }
-            msleep(10);
+            Rmsleep(10);
+            //emit log(QString::number(retry++));
         }
+
+
         testThread_reset();
-
-
-
 
 
     //first open all relay and switches
@@ -203,20 +213,20 @@ void TesterThread::run()
     //press down the PCBA
         emit log("AutoTest: 3  等待压板");
         setAirCylinderOn();
-        msleep(1000);
+        Rmsleep(1000);
         checkEven();
     //scan the QRcode
         emit log("AutoTest: 4  扫描二维码");
         cmd[0]=0x16; cmd[1] =0x54; cmd[2]=0x0D;
         QByteArray scancmd = QByteArray((char*)cmd,3);
         QRcode_update = false;
-        for( retry = 0, timeoutMs = 0;  retry < 3 ; retry++){
+        for( retry = 0, timeoutMs = 0;  retry < 1 ; retry++){
             emit sendSerialCmd(SCANER_ID ,scancmd);
             while(!QRcode_update){
-                msleep(10);
+                Rmsleep(10);
                 timeoutMs+=10;
                 if( mExitcmd || !mStartTest ) break;
-                if( timeoutMs >= 3000 ) break;
+                if( timeoutMs >= 5000 ) break;
             }
             if( QRcode_update )break;
         }
@@ -244,30 +254,30 @@ void TesterThread::run()
         emit log("AutoTest: 4 TP300 connect to TP107");
         setNormalMode();
         setTest2Mode();
-        msleep(20);
+        Rmsleep(20);
         checkEven();
     //power on
         emit log("AutoTest: 5 Power On 15V");
         setPowerOn();
-        msleep(switchmodeMs);
+        Rmsleep(switchmodeMs);
         checkEven();
     //dissconnect TP300
         emit log("AutoTest: 6 disconnect TP300 ");
         setNormalMode();
-        //msleep(10);
+        //Rmsleep(10);
         checkEven();
     //Verify that all LEDs are fully ON
         emit log("AutoTest: 7 Verify Led brighness");
         setMeasureLED();
         setConnectMeasureVmeter();
         setLedCaptureStart();
-        msleep(1000);
+        Rmsleep(2000);
         //LedBrightness_update_mean_cnt = 10;
         //LedBrightness_update = false;
         testThread_clear_data(10,5);
         timeoutMs = 0;
         while(!LedBrightness_update){
-            msleep(10);
+            Rmsleep(10);
             timeoutMs+=10;
             if( mExitcmd || !mStartTest ) break;
             if( timeoutMs >= 1000 ) break;
@@ -299,7 +309,7 @@ void TesterThread::run()
         emit log("AutoTest: 8 Verify Led Voltage");
         timeoutMs = 0;
         while(!VMeter_update){
-            msleep(10);
+            Rmsleep(10);
             timeoutMs+=10;
             if( mExitcmd || !mStartTest ) break;
             if( timeoutMs >= 2000 ) break;
@@ -328,13 +338,13 @@ void TesterThread::run()
         emit log("AutoTest: 9 Verify VDD");
         setMeasureVDD();
         setConnectMeasureVmeter();
-        msleep(100);
+        Rmsleep(100);
         //VMeter_update_mean_cnt = 5;
         //VMeter_update = false;
         testThread_clear_data(1,5);
         timeoutMs = 0;
         while(!VMeter_update){
-            msleep(10);
+            Rmsleep(10);
             timeoutMs+=10;
             if( mExitcmd || !mStartTest ) break;
             if( timeoutMs >= 2000 ) break;
@@ -361,30 +371,30 @@ void TesterThread::run()
     //Power off
         emit log("AutoTest: 10 Power off");
         setPowerOff();
-        msleep(poweroffMs);
+        Rmsleep(poweroffMs);
         checkEven();
     //TP303 High->Power on->TP303 LOW
         emit log("AutoTest: 11 Into TP303 mode");
         setNormalMode();
         setTest3Mode();
-        msleep(100);
+        Rmsleep(100);
         setPowerOn();
-        msleep(switchmodeMs);
+        Rmsleep(switchmodeMs);
         setNormalMode();
-        msleep(20);
+        Rmsleep(20);
         checkEven();
     //Verify Led mid brighness
         emit log("AutoTest: 12 Verify Led Mid brighness");
         setLedCaptureStart();
         setMeasureLED();
         setConnectMeasureVmeter();
-        msleep(500);
+        Rmsleep(1000);
         //LedBrightness_update_mean_cnt = 10;
         //LedBrightness_update = false;
         testThread_clear_data(10,5);
         timeoutMs = 0;
         while(!LedBrightness_update){
-            msleep(10);
+            Rmsleep(10);
             timeoutMs+=10;
             if( mExitcmd || !mStartTest ) break;
             if( timeoutMs >= 1000 ) break;
@@ -412,7 +422,7 @@ void TesterThread::run()
         emit log("AutoTest: 13 Verify Led mid current");
         timeoutMs = 0;
         while(!VMeter_update){
-            msleep(10);
+            Rmsleep(10);
             timeoutMs+=10;
             if( mExitcmd || !mStartTest ) break;
             if( timeoutMs >= 2000 ) break;
@@ -441,18 +451,18 @@ void TesterThread::run()
     //Power off
         emit log("AutoTest: 14 Power off");
         setPowerOff();
-        msleep(poweroffMs);
+        Rmsleep(poweroffMs);
         checkEven();
 
     //TP306 High->Power on->TP306 LOW
         emit log("AutoTest: 15 Into TP306 mode");
         setNormalMode();
         setTest4Mode();
-        msleep(100);
+        Rmsleep(100);
         setPowerOn();
-        msleep(switchmodeMs);
+        Rmsleep(switchmodeMs);
         setNormalMode();
-        msleep(20);
+        Rmsleep(20);
         checkEven();
 
         setConnectOutVmeter();
@@ -460,7 +470,7 @@ void TesterThread::run()
 
         //Verify Led half on , half off
         setLedCaptureStart();
-        msleep(100);
+        Rmsleep(100);
         ledhalfonTimeoutMs = 0;
         bool ledhalfon = false;
 
@@ -471,7 +481,7 @@ void TesterThread::run()
         {
             timeoutMs = 0;
             while(!LedBrightness_update){
-                msleep(10);
+                Rmsleep(10);
                 timeoutMs+=10;
                 ledhalfonTimeoutMs += 10;
                 if( ledhalfonTimeoutMs > 3000 ) break;
@@ -494,7 +504,7 @@ void TesterThread::run()
                 break;
             }
             if( mExitcmd || !mStartTest ) break;
-            msleep(1);
+            Rmsleep(1);
             ledhalfonTimeoutMs++;
         }
         if( !ledhalfon ){
@@ -516,7 +526,7 @@ void TesterThread::run()
         emit log("AutoTest: 16 Verify RLoad current");
         timeoutMs = 0;
         while(!VMeter_update){
-            msleep(10);
+            Rmsleep(10);
             timeoutMs+=10;
             if( mExitcmd || !mStartTest ) break;
             if( timeoutMs >= 2000 ) break;
@@ -548,16 +558,16 @@ void TesterThread::run()
     //Verify RLoad voltage
         emit log("AutoTest: 16 Verify RLoad current");
         setConnectOutVmeter();
-        msleep(100);
+        Rmsleep(100);
         setConnectResistor();
-        msleep(2000);
+        Rmsleep(2000);
         checkEven();
         //VMeter_update_mean_cnt = 5;
         //VMeter_update = false;
         testThread_clear_data(1,5);
         timeoutMs = 0;
         while(!VMeter_update){
-            msleep(10);
+            Rmsleep(10);
             timeoutMs+=10;
             if( mExitcmd || !mStartTest ) break;
             if( timeoutMs >= 2000 ) break;
@@ -581,20 +591,20 @@ void TesterThread::run()
         }
         setDisconnectOutVmeter();
         setDisconnectResistor();
-        msleep(100);
+        Rmsleep(100);
         checkEven();
  #endif
     //Power off
         emit log("AutoTest: 17 Power off");
         setPowerOff();
-        msleep(poweroffMs);
+        Rmsleep(poweroffMs);
         checkEven();
     //Normal mode
         emit log("AutoTest: 18 Into normal mode");
         setNormalMode();
-        msleep(100);
+        Rmsleep(100);
         setPowerOn();
-        //msleep(500);
+        //Rmsleep(500);
         checkEven();
 
     //Verify LED animation
@@ -602,7 +612,7 @@ void TesterThread::run()
         setConnectShaver();
         setLedCaptureStart();
         setVmeterReadStop();
-        msleep(100);
+        Rmsleep(100);
         ledAnimationTimeMs = 0;
         mLedAnimationStep = 0;
         mLedAnimationFullIndex = 0;
@@ -620,7 +630,7 @@ void TesterThread::run()
         {
             timeoutMs = 0;
             while(!LedBrightness_update){
-                msleep(1);
+                Rmsleep(1);
                 timeoutMs+=1;
                 ledAnimationTimeMs+=1;
                 if( mExitcmd || !mStartTest ) break;
@@ -645,7 +655,7 @@ void TesterThread::run()
                 break;
             }
             if( mExitcmd || !mStartTest ) break;
-            msleep(1);
+            Rmsleep(1);
             ledAnimationTimeMs++;
             //emit log("animation timeout "+QString::number(ledAnimationTimeMs));
         }
@@ -666,13 +676,13 @@ void TesterThread::run()
         }
         setDisconnectShaver();
         setLedCaptureStop();
-        msleep(100);
+        Rmsleep(100);
         checkEven();
 
     //send the result and reset
         emit log("AutoTest: test Finish");
         setPowerOff();
-        msleep(poweroffMs);
+        Rmsleep(poweroffMs);
         setAirCylinderOff();
         setAlloff();
         testThread_reset();

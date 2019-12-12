@@ -161,6 +161,7 @@ private:
     int testLedAnimationLoop();
     void testThread_clear_data(int led_mean_cnt, int vmeter_mean_cnt);
 
+    void Rmsleep(int ms);
 };
 
 #define setNormalMode() sendcmd(PC_TAG_CMD_SWITCHES_TESTMODE,0xff)

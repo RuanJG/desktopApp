@@ -19,6 +19,9 @@ namespace Ui {
 class MainWindow;
 }
 
+#define CSWL_INIT_SERIAL_BIT 0x1
+#define CSWL_INIT_METER_BIT 0x2
+
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -49,7 +52,7 @@ private slots:
     void rightTesterThread_result(TesterRecord res);
     void rightTesterThread_error(QString errorStr);
 
-    void shutdownTimerTrigger();
+    void initTimerTrigger();
 
     void on_serialconnectPushButton_clicked();
 
@@ -134,6 +137,9 @@ private:
         QString QRcode;
         QString id;
         int mLedBrightness[12];
+        bool ininted;
+        int initBits;
+        int initCounter;
     }TestTargetControler_t;
 
     TestTargetControler_t mLeftTester;
@@ -146,7 +152,7 @@ private:
     QSettings mSetting;
     QMap<QString,QString> mSerialMap;
     int mRelayStatus;
-    QTimer mShutdownTimer;
+    QTimer mInitTimer;
 
     void update_serial_info();
     bool saveDataToFile(TesterRecord res);

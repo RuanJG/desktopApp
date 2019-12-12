@@ -12,7 +12,7 @@ MainWindow::MainWindow(QWidget *parent) :
     mDataMutex(),
     mSetting(qApp->applicationDirPath()+"\/Setting.ini",QSettings::IniFormat),
     mSerialMap(),
-    mShutdownTimer()
+    mInitTimer()
 {
     ui->setupUi(this);
 
@@ -65,7 +65,16 @@ MainWindow::MainWindow(QWidget *parent) :
 
     update_serial_info();
 
-    connect( &mShutdownTimer, SIGNAL(timeout()),this,SLOT(shutdownTimerTrigger()));
+    connect( &mInitTimer, SIGNAL(timeout()),this,SLOT(initTimerTrigger()));
+    ui->VmeterStartcheckBox->clicked(true);
+    ui->VmeterStartcheckBox->setCheckState(Qt::CheckState::Checked);
+    mLeftTester.ininted = false;
+    mLeftTester.initBits = 0;
+    mLeftTester.initCounter=0;
+    mRightTester.ininted = false;
+    mRightTester.initBits = 0;
+    mRightTester.initCounter=0;
+    mInitTimer.start(5000);
 }
 
 MainWindow::~MainWindow()
@@ -438,6 +447,9 @@ void MainWindow::handle_Serial_Data( TestTargetControler_t* tester, QByteArray &
         const unsigned char *data = p+1;
         int cnt = iter->getSize()-1;
 
+        if( !tester->ininted ){
+            tester->initBits |= CSWL_INIT_SERIAL_BIT;
+        }
 
         if( (int)(tag&0xf0) == PMSG_TAG_LOG){
             QString log = QString::fromLocal8Bit( (const char*)data, cnt );
@@ -493,6 +505,15 @@ void MainWindow::handle_Serial_Data( TestTargetControler_t* tester, QByteArray &
                     float Vol;
                     memcpy( (char*)&Vol , data , 4);
                     QByteArray bytes = QByteArray((char*)data,cnt);
+
+                    if( !tester->ininted ){
+                        if( tester->initCounter < 5){
+                            tester->initCounter++;
+                        }else{
+                            tester->initBits |= CSWL_INIT_METER_BIT;
+                        }
+                        //continue;
+                    }
 
                     if( isLeftTester(tester) ){
                         emit leftUpdate_tester_data(tag, bytes);
@@ -1212,14 +1233,33 @@ void MainWindow::on_testResultpushButton_2_released()
     //mShutdownTimer.stop();
 }
 
-void MainWindow::shutdownTimerTrigger()
+void MainWindow::initTimerTrigger()
 {
-    QMessageBox Msg(QMessageBox::Question, tr("警告"), tr("是否关闭电脑？"),QMessageBox::Yes | QMessageBox::No, NULL );
-    if(  Msg.exec() == QMessageBox::Yes){
-        MySystemShutDown();
-    }else{
-        // ignore
+    int reqBits = (CSWL_INIT_METER_BIT|CSWL_INIT_SERIAL_BIT);
+    if( !mLeftTester.ininted ){
+        if( (mLeftTester.initBits & reqBits) == reqBits ){
+            mLeftTester.ininted = true;
+            ui->consoleTextBrowser->append("Left: selftTest OK");
+        }else{
+            ui->consoleTextBrowser->append("Left: selftTest failed");
+        }
     }
+    if( !mRightTester.ininted ){
+        if( (mRightTester.initBits & reqBits) == reqBits ){
+            mRightTester.ininted = true;
+            ui->consoleTextBrowser->append("Right: selftTest OK");
+        }else{
+            ui->consoleTextBrowser->append("Right: selftTest failed");
+        }
+    }
+
+    //if( mLeftTester.ininted || mRightTester.ininted){
+        ui->VmeterStartcheckBox->clicked(false);
+        ui->VmeterStartcheckBox->setCheckState(Qt::CheckState::Unchecked);
+        mInitTimer.stop();
+    //}
+
+
 }
 
 #include "qt_windows.h"
