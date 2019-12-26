@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>852</width>
-    <height>738</height>
+    <width>927</width>
+    <height>748</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -22,7 +22,7 @@
       </property>
       <widget class="QWidget" name="tab1">
        <attribute name="title">
-        <string>组装产线数据录入</string>
+        <string>组装打包录入</string>
        </attribute>
        <layout class="QGridLayout" name="gridLayout_3">
         <item row="0" column="0">
@@ -89,9 +89,19 @@
              </spacer>
             </item>
             <item>
+             <widget class="QCheckBox" name="rePackingcheckBox">
+              <property name="text">
+               <string>返工打包</string>
+              </property>
+             </widget>
+            </item>
+            <item>
              <widget class="QCheckBox" name="localModecheckBox">
               <property name="text">
                <string>离线模式</string>
+              </property>
+              <property name="checked">
+               <bool>true</bool>
               </property>
              </widget>
             </item>
@@ -142,9 +152,135 @@
         </item>
        </layout>
       </widget>
+      <widget class="QWidget" name="tab3">
+       <attribute name="title">
+        <string>出货扫描</string>
+       </attribute>
+       <layout class="QGridLayout" name="gridLayout_7">
+        <item row="0" column="0">
+         <layout class="QVBoxLayout" name="verticalLayout_5">
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_6">
+            <item>
+             <widget class="QLabel" name="label_10">
+              <property name="text">
+               <string>当前PO订单号</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="deliverPOlineEdit">
+              <property name="maximumSize">
+               <size>
+                <width>200</width>
+                <height>16777215</height>
+               </size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="modifydeliverPOpushButton_3">
+              <property name="text">
+               <string>输入/修改PO号[F5]</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_8">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_10">
+            <item>
+             <widget class="QScrollArea" name="scrollArea">
+              <property name="widgetResizable">
+               <bool>true</bool>
+              </property>
+              <widget class="QWidget" name="scrollAreaWidgetContents">
+               <property name="geometry">
+                <rect>
+                 <x>0</x>
+                 <y>0</y>
+                 <width>538</width>
+                 <height>238</height>
+                </rect>
+               </property>
+               <layout class="QGridLayout" name="gridLayout_6">
+                <item row="0" column="0">
+                 <widget class="QLabel" name="deliverIndicationlabel_11">
+                  <property name="minimumSize">
+                   <size>
+                    <width>500</width>
+                    <height>0</height>
+                   </size>
+                  </property>
+                  <property name="text">
+                   <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:26pt; font-weight:600; color:#00007f;&quot;&gt;填写右图所示订单号&lt;/span&gt;&lt;/p&gt;&lt;p&gt;&lt;br/&gt;&lt;/p&gt;&lt;p&gt;&lt;br/&gt;&lt;/p&gt;&lt;p&gt;&lt;br/&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="lable_png_shower">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+                <horstretch>1</horstretch>
+                <verstretch>1</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>320</width>
+                <height>240</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>600</width>
+                <height>400</height>
+               </size>
+              </property>
+              <property name="text">
+               <string>图片</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QTextBrowser" name="deliverBoxListtextBrowser_2">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+              <horstretch>1</horstretch>
+              <verstretch>1</verstretch>
+             </sizepolicy>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
       <widget class="QWidget" name="tab2">
        <attribute name="title">
-        <string>仓库数据录入</string>
+        <string>数据处理</string>
        </attribute>
        <layout class="QGridLayout" name="gridLayout_4">
         <item row="0" column="0">
@@ -152,7 +288,7 @@
           <item>
            <widget class="QGroupBox" name="groupBox_2">
             <property name="title">
-             <string>仓库出货记录导入</string>
+             <string>出货记录导入</string>
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_2">
              <item>
@@ -266,19 +402,19 @@
                  </property>
                  <property name="maximumSize">
                   <size>
-                   <width>100</width>
+                   <width>110</width>
                    <height>16777215</height>
                   </size>
                  </property>
                  <property name="text">
-                  <string>订单号</string>
+                  <string>订单号（6位数）</string>
                  </property>
                 </widget>
                </item>
                <item>
                 <widget class="QLineEdit" name="poCodeimportlineEdit_3">
                  <property name="text">
-                  <string>000000</string>
+                  <string/>
                  </property>
                 </widget>
                </item>
@@ -315,7 +451,7 @@
                <item>
                 <widget class="QLabel" name="label_7">
                  <property name="text">
-                  <string>注： (如果导入文件里有订单号，则以文件里的订单号优先用于保存到数据库）</string>
+                  <string>注： (箱号列表文件格式是一个箱号一行）</string>
                  </property>
                 </widget>
                </item>
@@ -538,7 +674,7 @@
                <item>
                 <widget class="QPushButton" name="pushButton_2">
                  <property name="text">
-                  <string>还原数据库</string>
+                  <string>导入/还原数据库</string>
                  </property>
                 </widget>
                </item>
@@ -563,7 +699,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>852</width>
+     <width>927</width>
      <height>26</height>
     </rect>
    </property>

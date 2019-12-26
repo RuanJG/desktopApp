@@ -10,7 +10,14 @@ MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow),
     mDataBaseHelper(),
-    mCurrentBox()
+    mCurrentBox(),
+    mSetting(qApp->applicationDirPath()+"/Setting.ini",QSettings::IniFormat),
+    mImgOri(),
+    mImgScaned(),
+    mImgShowPO(),
+    mImageTimer(),
+    mDeliveryCounter(0),
+    mDeliverList()
 {
     ui->setupUi(this);
     ui->indicatelabel_3->setFont(QFont("Microsoft YaHei", 40, 75));
@@ -26,11 +33,50 @@ MainWindow::MainWindow(QWidget *parent) :
     mdir.mkpath(filedirPath);
     mLocalDataBaseFileName =QDir::toNativeSeparators( filedirPath+"/"+"Barcode_Record.db" );
 
-    mUsingLocalDB = false;
+    bool mode = mSetting.value("DbLocalMode",true).toBool();
+    mSetting.setValue("DbLocalMode",mode);
+    mSetting.sync();
+
+    ui->localModecheckBox->setChecked(mode);
+
     QTimer::singleShot(1000, this, SLOT(slot_Start_connectDB()));
     mStepIndex = -1;
     updateTable();
     updateStep();
+
+
+    int tabindex = mSetting.value("TabIndex",0).toInt();
+    ui->tabWidget->setCurrentIndex(tabindex);
+
+    ui->deliverPOlineEdit->setMaxLength(POCODE_LENGTH);
+    ui->deliverPOlineEdit->setReadOnly(true);
+
+
+    ui->deliverIndicationlabel_11->setFont(QFont("Microsoft YaHei", 40, 75));
+    QPalette pa1;
+    pa1.setColor(QPalette::WindowText,Qt::blue);
+    ui->deliverIndicationlabel_11->setPalette(pa1);
+    ui->deliverIndicationlabel_11->setText(tr("数据库未连接..."));
+
+    //mImgOri.load(qApp->applicationDirPath()+"/lable_orig.png");
+    //mImgScaned.load(qApp->applicationDirPath()+"/lable_scaned.png");
+    //mImgShowPO.load(qApp->applicationDirPath()+"/lable_show_PO.png");
+    mImgOri.load(":/img/images/lable_orig.png");
+    mImgScaned.load(":/img/images/lable_scaned.png");
+    mImgShowPO.load(":/img/images/lable_show_PO.png");
+    ui->lable_png_shower->setPixmap(mImgOri);
+    mImageAnimationIndex = 0;
+    ui->lable_png_shower->setScaledContents(true);
+    ui->lable_png_shower->setFrameStyle(QFrame::Panel | QFrame::Sunken);
+    ui->lable_png_shower->setScaledContents(true);
+    ui->lable_png_shower->setVisible(true);
+    //QTimer::singleShot(1000, this, SLOT(slot_show_scanLable()));
+    connect(&mImageTimer,SIGNAL(timeout()),this, SLOT(slot_show_scanLable()));
+    mImageTimer.start(1000);
+
+
+    //ui->tabWidget->tabBar()->hide();
+    //QTimer::singleShot(100, this, SLOT(on_modifydeliverPOpushButton_3_clicked()));
 }
 
 MainWindow::~MainWindow()
@@ -38,12 +84,47 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
+void MainWindow::slot_show_scanLable()
+{
+    if( mImageAnimationIndex == 0){
+        if( ui->deliverPOlineEdit->text().length() == 0){
+            ui->deliverIndicationlabel_11->setText(tr("按F5\n输入右图所示PO号码"));
+            ui->lable_png_shower->setPixmap(mImgShowPO);
+        }else{
+            ui->deliverIndicationlabel_11->setText(tr("扫描外箱条形码\n如右图所示"));
+            ui->lable_png_shower->setPixmap(mImgScaned);
+        }
+        mImageAnimationIndex = 1;
+    }else{
+        ui->lable_png_shower->setPixmap(mImgOri);
+        mImageAnimationIndex = 0;
+    }
+
+    if( !mDataBaseHelper.isOpen()){
+        ui->deliverIndicationlabel_11->setText(tr("数据库未连接..."));
+    }
+    //QTimer::singleShot(1000, this, SLOT(slot_show_scanLable()));
+}
+
 void MainWindow::slot_Start_connectDB()
 {
 
-    if( mDataBaseHelper.isOpen() ) return; //if manual set use local db, no need to reconnect.
+    ui->localModecheckBox->setDisabled(true);
 
-    if( mUsingLocalDB ){
+    if( mDataBaseHelper.isOpen() ){
+        if( isUsingLocalDB(&mDataBaseHelper) && ui->localModecheckBox->isChecked() ){
+            ui->localModecheckBox->setEnabled(true);
+            return;
+        }
+        if( (!isUsingLocalDB(&mDataBaseHelper)) && (!ui->localModecheckBox->isChecked())){
+            ui->localModecheckBox->setEnabled(true);
+            return;
+        }
+        mDataBaseHelper.close();
+    }
+
+
+    if( ui->localModecheckBox->isChecked() ){
         if( openLocalDataBase( &mDataBaseHelper ) ){
             mStepIndex = 0;
         }else{
@@ -73,7 +154,7 @@ void MainWindow::slot_Start_connectDB()
         }
     }
 
-
+    ui->localModecheckBox->setEnabled(true);
 
     updateTable();
     updateStep();
@@ -198,109 +279,181 @@ void MainWindow::updateStep()
     }
 }
 
-bool MainWindow::eventFilter(QObject *watched, QEvent *e)
+QString MainWindow::parseStringFromScaner(QByteArray bytes)
 {
-    if(e->type() == QEvent::KeyPress  && ui->tabWidget->currentIndex() == 0)
-    {
-        QKeyEvent *keyEvent = static_cast<QKeyEvent *>(e);
-        mStringData.append(keyEvent->text().toLocal8Bit());
-        qDebug()<< mStringData.toHex();
-        if( mStepIndex == 0){
-            //prase boxcode:   0x2 [20] 0x4
-            int index = mStringData.indexOf(0x2);
-            if( index > 0 ) mStringData.remove(0,index);
-            if ( index == -1 ) mStringData.clear();
+    QString res;
 
-            if( mStringData.length()>= (BOXCODE_LENGTH+2) ){
-                if( mStringData.at(BOXCODE_LENGTH+1)!=0x04){
-                    mStringData.clear();
-                }
-                mStringData.remove(0,1);
-                mStringData.remove(BOXCODE_LENGTH,mStringData.length()-BOXCODE_LENGTH);
+    mStringData.append(bytes);
+    //qDebug()<< mStringData.toHex();
 
-                mCurrentBox.reset();
-                mCurrentBox.boxQRcode = QString::fromLocal8Bit(mStringData);
+    //prase boxcode:   0x2 [xxxx] 0x4
+    int index = mStringData.indexOf(0x2);
+    if ( index == -1 ) {
+        mStringData.clear();
+        return res;
+    }
+    if( index > 0 ) mStringData.remove(0,index);
 
-                QString crecord;
-                QList<UnitsBox> boxlist = mDataBaseHelper.findBoxbyBoxCode(mCurrentBox.boxQRcode);
+    int end = mStringData.indexOf(0x4);
+    if( end == -1 ){
+        return res;
+    }
+    QByteArray resbyte = mStringData.left(end); //0x2 [xxx]
+    resbyte.remove(0,1); // remove 0x2
+    res = QString::fromLocal8Bit(resbyte);
 
-                if(boxlist.size() > 0){
-                    //old box, ask for update or rescan?
-                    //QMessageBox Msg(QMessageBox::Question, tr("警告"), tr("此包装箱已经记录，是否删除上次记录？"),QMessageBox::Yes | QMessageBox::No, NULL );
-                    //if( Msg.exec() == QMessageBox::Yes){
-                    if( true ){
-                        //update box record
-                        if( ! mDataBaseHelper.deleteBoxbyBoxcode(mCurrentBox.boxQRcode)){
-                            QMessageBox Msg(QMessageBox::Question, tr("警告"), tr("此箱号已保存在数据库，现在删除记录失败，请重启软件"));
-                            mStepIndex = 3;
-                            updateStep();
-                            return true;
-                        }
-                        mStepIndex++;
-                        updateStep();
-                        updateTable();
-                    }else{
-                        // ignore this box scan, wait for next scan
-                    }
-                }else{
-                    // new box, start next step to scan units
-                    mStepIndex++;
-                    updateStep();
-                    updateTable();
-                }
+    mStringData.remove(0,1);//remove 0x4
+
+    return res;
+}
+
+void MainWindow::DeliveryTabHandler(QEvent *e)
+{
+    QKeyEvent *keyEvent = static_cast<QKeyEvent *>(e);
+
+    if( keyEvent->key() == Qt::Key_F5 ){
+        QTimer::singleShot(100, this, SLOT(on_modifydeliverPOpushButton_3_clicked()));
+    }else {
+
+        if( ui->deliverPOlineEdit->text().length() != POCODE_LENGTH) return;
+        QString scanStr = parseStringFromScaner(keyEvent->text().toLocal8Bit());
+        if( scanStr.length() != BOXCODE_LENGTH ) return;
+
+        QString boxCode = scanStr;
+        QList<UnitsBox> boxlist = mDataBaseHelper.findBoxbyBoxCode(boxCode);
+
+        if(boxlist.size() > 0){
+            UnitsBox box = boxlist.at(0);
+            box.poCode = ui->deliverPOlineEdit->text();
+            if( !mDataBaseHelper.updateBox(box)){
+                QMessageBox::warning(this,tr("警告"), tr("更新数据库失败，请重启软件重新扫描"));
+                return;
             }
-        }else if( mStepIndex == 1){
-            //prase units code : 0x2 [BARCODE_LENGTH] 0x4
-            int index = mStringData.indexOf(0x2);
-            if( index > 0 ) mStringData.remove(0,index);
-            if ( index == -1 ) mStringData.clear();
-
-            if( mStringData.length() >= (BARCODE_LENGTH+2) ){
-                if( mStringData.at(BARCODE_LENGTH+1)==0x04){
-                    mStringData.remove(0,1);
-                    mStringData.remove(BARCODE_LENGTH,mStringData.length()-BARCODE_LENGTH);
-                    QString barcode = QString::fromLocal8Bit(mStringData);
-                    if( -1 == mCurrentBox.RRCcodeList.indexOf(barcode) ){
-                        //check whether it is existed ? or ignore
-                        QList<UnitsBox> boxlist = mDataBaseHelper.findBoxbyUnitCode(barcode);
-                        if( boxlist.size() > 0 ){
-                            //TODO ignore or delete record exited?
-                            if( ! mDataBaseHelper.deleteBoxbyBoxcode(boxlist.at(0).boxQRcode)){
-                                QMessageBox Msg(QMessageBox::Question, tr("警告"), tr("此产品已保存在数据库，现在删除记录失败，请重启软件"));
-                                mStepIndex = 3;
-                                updateStep();
-                                return true;
-                            }
-                            mCurrentBox.RRCcodeList.append( barcode );
-                            mCurrentBox.RRCcount++;
-                        }else{
-                            mCurrentBox.RRCcodeList.append( barcode );
-                            mCurrentBox.RRCcount++;
-                        }
-                    }
-                    updateTable();
-                    updateStep();
-                    mStringData.clear();
-                    if( mCurrentBox.RRCcodeList.size() >= ui->unitsCountspinBox->value()){
-                        mCurrentBox.RRCcount = mCurrentBox.RRCcodeList.size();
-                        mCurrentBox.packDate =  QDateTime::currentDateTime().toString("yyyyMMdd");
-                        if( ! mDataBaseHelper.append(mCurrentBox) ){
-                            QMessageBox::warning(this,"Error",tr("保存数据失败，重启软件，重新扫描"));
-                            mStepIndex = 3;
-                            updateStep();
-                        }else{
-                            mStepIndex = 2;
-                            updateStep();
-                            QTimer::singleShot(5000, this, SLOT(slot_Start_Packing()));
-                        }
-                    }
-                }else{
-                    mStringData.clear();
-                }
+            //show information
+            QString log;
+            if( mDeliverList.indexOf(boxCode) >= 0) {
+                log = tr("箱号%1 重复扫描").arg(boxCode);
+            }else{
+                mDeliverList.append(boxCode);
+                mDeliveryCounter++;
+                log = tr("%1, 扫描到箱号%2, 成功录入系统").arg(QString::number(mDeliveryCounter)).arg(boxCode);
             }
+            ui->deliverBoxListtextBrowser_2->append(log);
+        }else{
+            QMessageBox::warning(this,tr("警告"), tr("这包装箱没有入库信息，请进入[组装打包录入]，重新扫描产品"));
+        }
+    }
+}
+
+void MainWindow::PackingTabHandler(QEvent *e)
+{
+    QKeyEvent *keyEvent = static_cast<QKeyEvent *>(e);
+    QString scanStr = parseStringFromScaner(keyEvent->text().toLocal8Bit());
+
+    if( mStepIndex == 0){
+
+        if( scanStr.length() != BOXCODE_LENGTH ) return;
+
+        mCurrentBox.reset();
+        mCurrentBox.boxQRcode = scanStr;
+        if( mCurrentBox.boxQRcode.left(6) != "000000"){
+            mCurrentBox.poCode = mCurrentBox.boxQRcode.left(6);
         }
 
-        return true;
+        QString crecord;
+        QList<UnitsBox> boxlist = mDataBaseHelper.findBoxbyBoxCode(mCurrentBox.boxQRcode);
+
+        if(boxlist.size() > 0){
+            //old box, ask for update or rescan?
+            if( ui->rePackingcheckBox->isChecked() ){
+                //update box record
+                if( ! mDataBaseHelper.deleteBoxbyBoxcode(mCurrentBox.boxQRcode)){
+                    QMessageBox::warning(this,tr("警告"), tr("此包装箱已扫描过，现删除旧记录失败，请重启软件"));
+                    mStepIndex = 3;
+                    updateStep();
+                    return ;
+                }
+                ui->textBrowser->append(tr("删除：箱号（%1）的旧记录").arg(mCurrentBox.boxQRcode));
+                mStepIndex++;
+                updateStep();
+                updateTable();
+            }else{
+                QMessageBox::warning(this,tr("警告"), tr("此包装箱已扫描过，请检查是否有重复外箱标签，如果是返工打包，请勾选【返工打包】，再进行扫描"));
+            }
+        }else{
+            // new box, start next step to scan units
+            mStepIndex++;
+            updateStep();
+            updateTable();
+        }
+
+    }else if( mStepIndex == 1){
+
+        if( scanStr.length() != BARCODE_LENGTH ) return;
+        QString barcode = scanStr;
+        if( -1 == mCurrentBox.RRCcodeList.indexOf(barcode) ){
+            //check whether it is existed ? or ignore
+            QList<UnitsBox> boxlist = mDataBaseHelper.findBoxbyUnitCode(barcode);
+            if( boxlist.size() > 0 ){
+                if( ui->rePackingcheckBox->isChecked() ){
+                    //repacking mode
+                    if( ! mDataBaseHelper.deleteBoxbyBoxcode(boxlist.at(0).boxQRcode)){
+                        //QMessageBox Msg(QMessageBox::Question, tr("警告"), tr("此产品已保存在数据库，现在删除记录失败，请重启软件"));
+                        QMessageBox::warning(this,tr("警告"), tr("此产品已保存在数据库，现删除旧记录失败，请重启软件"));
+                        mStepIndex = 3;
+                        updateStep();
+                        return ;
+                    }
+                    ui->textBrowser->append(tr("删除：箱号（%1）的旧记录").arg(boxlist.at(0).boxQRcode));
+                    mCurrentBox.RRCcodeList.append( barcode );
+                    mCurrentBox.RRCcount++;
+                }else{
+                    //assembly mode
+                    QMessageBox::warning(this,tr("警告"), tr("此产品已打包，请检查是否有重复条形码标签，如果是返工打包，请勾选【返工打包】，再进行扫描"));
+                }
+
+            }else{
+                mCurrentBox.RRCcodeList.append( barcode );
+                mCurrentBox.RRCcount++;
+            }
+        }
+        updateTable();
+        updateStep();
+        if( mCurrentBox.RRCcodeList.size() >= ui->unitsCountspinBox->value()){
+            mCurrentBox.RRCcount = mCurrentBox.RRCcodeList.size();
+            mCurrentBox.packDate =  QDateTime::currentDateTime().toString("yyyyMMdd");
+            if( ! mDataBaseHelper.append(mCurrentBox) ){
+                QMessageBox::warning(this,"Error",tr("保存数据失败，重启软件，重新扫描"));
+                mStepIndex = 3;
+                updateStep();
+            }else{
+                mStepIndex = 2;
+                updateStep();
+                QTimer::singleShot(5000, this, SLOT(slot_Start_Packing()));
+            }
+        }
+    }
+}
+
+bool MainWindow::eventFilter(QObject *watched, QEvent *e)
+{
+    QString scanStr;
+
+    if(e->type() == QEvent::KeyPress  && ui->tabWidget->currentIndex() == 0)
+    {
+        if( this->isActiveWindow() ){
+            PackingTabHandler(e);
+            return true;
+        }else{
+            return QMainWindow::eventFilter(watched,e);
+        }
+    }else if ( e->type() == QEvent::KeyPress  && ui->tabWidget->currentIndex() == 1){
+        if( this->isActiveWindow() ){
+            DeliveryTabHandler(e);
+            return true;
+        }else{
+            return QMainWindow::eventFilter(watched,e);
+        }
     }else{
         return QMainWindow::eventFilter(watched,e);
     }
@@ -342,11 +495,11 @@ void MainWindow::on_exportpushButton_clicked()
     mdir.mkpath(filedirPath);
 
     QFileDialog *fileDialog = new QFileDialog(this);
-    //QStringList nameFilter;
-    //nameFilter << "*.txt" << "*.*";
+    QStringList nameFilter;
+    nameFilter << "*.txt" << "*.*";
     fileDialog->setWindowTitle(tr("选择导出文件路径"));
     fileDialog->setDirectory(QDir::currentPath());
-    //fileDialog->setNameFilters(nameFilter);
+    fileDialog->setNameFilters(nameFilter);
     fileDialog->setFileMode(QFileDialog::AnyFile);
     fileDialog->setViewMode(QFileDialog::Detail);
 
@@ -559,7 +712,6 @@ void MainWindow::findoutNotExitBarcode()
     QMessageBox::information(this,tr("提示"),tr("对比数据时需要一定时间，请耐心等待，不要关闭软件"));
 
     QString str;
-    int totallyCount = 0;
     ui->importtextBrowser_2->clear();
 
     while( txtfile.pos() < txtfile.size() ){
@@ -627,7 +779,6 @@ void MainWindow::findoutRepeatBarcode()
     QMessageBox::information(this,tr("提示"),tr("对比数据时需要一定时间，请耐心等待，不要关闭软件"));
 
     QString str;
-    int totallyCount = 0;
     ui->importtextBrowser_2->clear();
 
     while( txtfile.pos() < txtfile.size() ){
@@ -812,13 +963,13 @@ void MainWindow::on_boxlisttxtfileimportpushButton_4_clicked()
             str = recordSection.at(i);
             qDebug()<< str;
             if( str.length() == POCODE_LENGTH ){
-                POcode = str;
+                //POcode = str;
             }else if( str.length() == BOXCODE_LENGTH ) {
                 BoxCode = str;
             }else if( str.length() == DELIEVERY_DATE_LENGTH){
-                DelievryDate = str;
+                //DelievryDate = str;
             }else if( str.length() ==  BARCODE_LENGTH){
-                Barcode = str;
+                //Barcode = str;
             }else{
                 //ignore useless imformation
             }
@@ -1025,7 +1176,13 @@ void MainWindow::on_mergerLocaldbpushButton_clicked()
 
 void MainWindow::on_localModecheckBox_toggled(bool checked)
 {
-    mUsingLocalDB = checked;
+    mStepIndex = -1;
+    updateTable();
+    updateStep();
+    QTimer::singleShot(500, this, SLOT(slot_Start_connectDB()));
+
+    mSetting.setValue("DbLocalMode",checked);
+    mSetting.sync();
 }
 
 void MainWindow::on_pushButton_clicked()
@@ -1168,4 +1325,38 @@ void MainWindow::on_pushButton_2_clicked()
     txtfile.close();
     QMessageBox::warning(this,tr("完成"),tr("共读到%1个箱号，成功导入%2个箱号到数据库中").arg(QString::number(totallyCount),QString::number(importCount)));
 
+}
+
+void MainWindow::on_localModecheckBox_clicked(bool checked)
+{
+
+}
+
+void MainWindow::on_modifydeliverPOpushButton_3_clicked()
+{
+    bool ok;
+    QString text = QInputDialog::getText(this, tr("输入PO订单号"),
+            tr("PO订单号%1位数:").arg(QString::number(POCODE_LENGTH)),
+            QLineEdit::Normal,
+            "", &ok);
+
+    if( !ok ) return;
+
+    if( text.length() != POCODE_LENGTH ){
+        QMessageBox::warning(this,tr("错误"),tr("PO号不合符要求，需要%1位数").arg(QString::number(POCODE_LENGTH)));
+        return;
+    }
+
+    ui->deliverPOlineEdit->setText(text);
+    ui->deliverIndicationlabel_11->setText(tr("扫描外箱条形码\n如右图所示"));
+
+   ui->deliverBoxListtextBrowser_2->append(tr("PO订单号")+text+":");
+   mDeliveryCounter = 0;
+   mDeliverList.clear();
+}
+
+void MainWindow::on_tabWidget_currentChanged(int index)
+{
+    mSetting.setValue("TabIndex",index);
+    mSetting.sync();
 }

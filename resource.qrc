@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/img">
+        <file>images/lable_orig.png</file>
+        <file>images/lable_scaned.png</file>
+        <file>images/lable_show_PO.png</file>
+    </qresource>
+</RCC>

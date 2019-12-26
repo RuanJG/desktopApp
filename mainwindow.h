@@ -16,8 +16,9 @@
 #include <QtSql/QSqlRecord>
 #include <QtSql/QSqlError>
 #include "databasehelper.h"
-
-
+#include <QSettings>
+#include <QTimer>
+#include <QInputDialog>
 
 namespace Ui {
 class MainWindow;
@@ -69,6 +70,13 @@ private slots:
 
     void on_pushButton_2_clicked();
 
+    void on_localModecheckBox_clicked(bool checked);
+
+    void slot_show_scanLable();
+    void on_modifydeliverPOpushButton_3_clicked();
+
+    void on_tabWidget_currentChanged(int index);
+
 private:
     Ui::MainWindow *ui;
     volatile int mStepIndex;
@@ -76,7 +84,13 @@ private:
     UnitsBox mCurrentBox;
     QByteArray mStringData;
     QMessageBox mMsgbox;
-    volatile bool mUsingLocalDB;
+    QSettings mSetting;
+    QPixmap  mImgOri,mImgScaned,mImgShowPO;
+    int mImageAnimationIndex;
+    QTimer mImageTimer;
+    int mDeliveryCounter;
+    QStringList mDeliverList;
+
     void updateTable();
     void updateStep();
     void testDatabase(DataBaseHelper *db);
@@ -89,6 +103,9 @@ private:
     void findoutNotExitBarcode();
     void findoutRepeatBarcode();
     void setPODateNA();
+    QString parseStringFromScaner(QByteArray bytes);
+    void PackingTabHandler(QEvent *e);
+    void DeliveryTabHandler(QEvent *e);
 };
 
 
