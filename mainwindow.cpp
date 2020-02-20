@@ -15,8 +15,14 @@ MainWindow::MainWindow(QWidget *parent) :
     mDataMutex(),
     mSetting(qApp->applicationDirPath()+"/Setting.ini",QSettings::IniFormat),
     mSerialMap(),
-    mInitTimer(),
-    mVmeterType()
+    mDBTimer(),
+    mVmeterType(),
+    mDataBase(),
+    mLocalDataBase(),
+    mDBSyncing(false),
+    mTableName("CSWL_PCBA_TEST"),
+    mTableItems(),
+    mTableItemsSize()
 {
     ui->setupUi(this);
 
@@ -69,6 +75,8 @@ MainWindow::MainWindow(QWidget *parent) :
 
     update_serial_info();
 
+    mLeftTester.ininted = true;
+    mRightTester.ininted = true;
 
     //Vmeter type
     mVmeterType.insert("VICTOR8165",1);
@@ -89,26 +97,24 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->rightVmeterSelectcomboBox_2->setCurrentText(rightVmeter);
 
 
-#if 0
-    connect( &mInitTimer, SIGNAL(timeout()),this,SLOT(initTimerTrigger()));
-    ui->VmeterStartcheckBox->clicked(true);
-    ui->VmeterStartcheckBox->setCheckState(Qt::CheckState::Checked);
-    mLeftTester.ininted = false;
-    mLeftTester.initBits = 0;
-    mLeftTester.initCounter=0;
-    mRightTester.ininted = false;
-    mRightTester.initBits = 0;
-    mRightTester.initCounter=0;
-    mInitTimer.start(5000);
-#else
-    mLeftTester.ininted = true;
-    mRightTester.ininted = true;
-#endif
 
 
+    //DataBase connect
+    QString listStr = "QRcode,Date,ErrorCode,VDD,VLED_100,VLED_50,Rload_Ampera,LED_Animation,LED1_100,LED2_100,LED3_100,LED4_100,LED5_100,LED6_100,LED7_100,LED8_100,LED9_100,LED10_100,LED11_100,LED12_100,LED1_30,LED2_30,LED3_30,LED4_30,LED5_30,LED6_30,LED7_30,LED8_30,LED9_30,LED10_30,LED11_30,LED12_30";
+    mTableItems = listStr.split(",",QString::SkipEmptyParts);
+    listStr = "40,20,3,8,8,8,8,2,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8";
+    mTableItemsSize = listStr.split(",",QString::SkipEmptyParts);
+    if( mTableItems.size() != mTableItemsSize.size()){
+        ui->consoleTextBrowser->append("DataBase Table items list error !");
+        QMessageBox::warning(this,"Error",tr("数据库表头设置错误"));
+        return;
+    }else{
+        connect( &mDBTimer, SIGNAL(timeout()),this,SLOT(DBTimerTrigger()));
+        mDBTimer.start(1000);
+    }
 
-#if 1
 
+    // show IP
     QHostInfo info = QHostInfo::fromName(QHostInfo::localHostName());
     ui->consoleTextBrowser->append("Server HostName:"+QHostInfo::localHostName());
     ui->consoleTextBrowser->append("Server IP:");
@@ -119,6 +125,7 @@ MainWindow::MainWindow(QWidget *parent) :
         }
     }
 
+#if 0
     QList<QNetworkInterface> nets = QNetworkInterface::allInterfaces();// 获取所有网络接口列表
     int nCnt = nets.count();
     QString strMacAddr = "";
@@ -165,7 +172,7 @@ MainWindow::~MainWindow()
 bool MainWindow::saveDataToFile(TesterRecord res){
     QDir mdir;
     QString filedirPath = QDir::currentPath()+"/reports";
-    QString filename =QDir::toNativeSeparators( filedirPath+"/"+"CSWL_Tester_Data.txt" );
+    QString filename =QDir::toNativeSeparators( filedirPath+"/"+"CSWL_Tester_Data_MP.txt" );
     mdir.mkpath(filedirPath);
 
     mDataMutex.lock();
@@ -196,13 +203,9 @@ bool MainWindow::saveDataToFile(TesterRecord res){
     }
 
     QString record;
-    record = record+res.date+",";
     record = record+res.QRcode+",";
-    record = record+"E"+QString::number(res.errorCode);
-    if( res.errorCodeParameter.length()>0 )
-        record += "("+res.errorCodeParameter+"),";
-    else
-        record += ",";
+    record = record+res.date+",";
+    record = record+"E"+QString::number(res.errorCode)+",";
     record = record+QString::number(res.VDD,'f',4)+",";
     record = record+QString::number(res.VLedFull,'f',4)+",";
     record = record+QString::number(res.VLedMid,'f',4)+",";
@@ -214,12 +217,24 @@ bool MainWindow::saveDataToFile(TesterRecord res){
     for( int i=0; i<12; i++ ){
         record = record+QString::number(res.LedMidLevel[i])+",";
     }
+
+    QStringList dbrecord = record.split(",",QString::SkipEmptyParts);
+
     record = record + res.errorCodeString +",";
     record = record+"\r\n";
     mTxtfile.write(record.toLocal8Bit());
     mTxtfile.flush();
-
     mTxtfile.close();
+
+
+    if( !mDataBase.isOpen() || !mDataBase.flushRecord(dbrecord)){
+        ui->consoleTextBrowser->append(tr("保存数据到服务器失败"));
+        if( !mLocalDataBase.isOpen() || !mLocalDataBase.flushRecord(dbrecord) ){
+            QMessageBox::warning(this,"ERROR",tr("数据保存到本地数据库失败,请重启软件"));
+        }
+    }
+
+
     mDataMutex.unlock();
     return true;
 }
@@ -616,7 +631,15 @@ void MainWindow::handle_Serial_Data( TestTargetControler_t* tester, QByteArray &
                 }
             }else if(tag == PC_TAG_DATA_BUTTON){
                 if( cnt==1 && data[0]==1){
-                    on_startTestpushButton_clicked();
+                    if(!mLocalDataBase.isOpen() ){
+                        QMessageBox::warning(this,"ERROR", tr("数据库打开没有连接成功，请稍等或重启软件"));
+                    }else{
+                        if( mDBSyncing ){
+                            QMessageBox::warning(this,"ERROR", tr("数据向服务器同步中，请稍等..."));
+                        }else{
+                            on_startTestpushButton_clicked();
+                        }
+                    }
                 }else{
                     ui->consoleTextBrowser->append("Start Button data error");
                 }
@@ -1301,37 +1324,118 @@ void MainWindow::on_testResultpushButton_2_released()
     //mShutdownTimer.stop();
 }
 
-void MainWindow::initTimerTrigger()
+void MainWindow::syncRemoteDataBase()
 {
-    int reqBits = (CSWL_INIT_METER_BIT|CSWL_INIT_SERIAL_BIT);
-    if( !mLeftTester.ininted ){
-        if( (mLeftTester.initBits & reqBits) == reqBits ){
-            mLeftTester.ininted = true;
-            ui->consoleTextBrowser->append("Left: selftTest OK");
-        }else{
-            ui->consoleTextBrowser->append("Left: selftTest failed");
-        }
+    // check sync local database and remote database, local database records are those flushed to remote failed in last build.
+
+    if( !mLocalDataBase.isOpen() ){
+        QMessageBox::warning(this,"Error",tr("本地数据库打开失败"));
+        return;
     }
-    if( !mRightTester.ininted ){
-        if( (mRightTester.initBits & reqBits) == reqBits ){
-            mRightTester.ininted = true;
-            ui->consoleTextBrowser->append("Right: selftTest OK");
-        }else{
-            ui->consoleTextBrowser->append("Right: selftTest failed");
-        }
+    if( !mDataBase.isOpen() ){
+        QMessageBox::warning(this,"Error",tr("数据库服务器未连接"));
+        return;
     }
 
-    //if( mLeftTester.ininted || mRightTester.ininted){
-        ui->VmeterStartcheckBox->clicked(false);
-        ui->VmeterStartcheckBox->setCheckState(Qt::CheckState::Unchecked);
-        mInitTimer.stop();
-    //}
+    mDBSyncing = true;
 
+    QList<QStringList> records = mLocalDataBase.getRecord();
+    QStringList remoteRecord;
+    QStringList record;
+    bool update;
 
+    for( int i=0; i< records.size(); i++){
+        record = records[i];
+        update = false;
+        remoteRecord = mDataBase.getRecord(record[0]);
+
+        //check if remote has this record
+        if( remoteRecord.size()>0){
+            //remote has this pcba data, compare the date , if local is newer , update
+            if( QString::compare(record[1],remoteRecord[1],Qt::CaseInsensitive) > 0  ){
+                update = true;
+            }
+        }else{
+            //remote don't have this record , push to remote
+            update = true;
+        }
+
+        if( update )
+        {
+            if( ! mDataBase.flushRecord(record) ){
+                QMessageBox::warning(this,"Error",tr("同步本地数据到服务器时,提交数据失败"));
+                mDBSyncing = false;
+                return;
+            }
+        }
+
+        if( ! mLocalDataBase.deleteRecord(mTableItems[0],record[0]) ){
+            QMessageBox::warning(this,"Error",tr("同步本地数据到服务器时，删除操作失败"));
+            mDBSyncing = false;
+            return;
+        }
+    }
+    ui->consoleTextBrowser->append(tr("完成同步本地数据到服务器"));
+    mDBSyncing = false;
+}
+
+void MainWindow::DBTimerTrigger()
+{
+    bool res1 ,res2 ;
+
+    mDBTimer.stop();
+
+    ui->consoleTextBrowser->append("Start connect DataBase...");
+    res1 = true;
+    if( ! mLocalDataBase.isOpen())
+    {
+        QDir mdir;
+        QString filedirPath = QDir::currentPath()+"/reports";
+        QString filename =QDir::toNativeSeparators( filedirPath+"/"+"CSWL_Tester_Data.db" );
+        mdir.mkpath(filedirPath);
+
+        res1 =  mLocalDataBase.openSqliteDataBase(filename,mTableName,mTableItems);
+        if( res1 ){
+            ui->consoleTextBrowser->append(tr("打开本地数据库表成功"));
+        }else{
+            QMessageBox::warning(this,"Error",tr("打开本地数据库表失败"));
+        }
+    }
+
+    if( ! mDataBase.isOpen() )
+    {
+#if 0
+        QString filedirPath = QDir::currentPath()+"/reports";
+        QString filename =QDir::toNativeSeparators( filedirPath+"/"+"CSWL_Tester_Data_remote.db" );
+        res2 =  mDataBase.openSqliteDataBase(filename,mTableName,mTableItems);
+#else
+        res2 = mDataBase.openODBCDataBase("DRIVER={SQL SERVER};SERVER=RSERP;DATABASE=AG", "RSERP", "AG", "AG123456", mTableName,mTableItems,mTableItemsSize);
+#endif
+        if( res2 ){
+            ui->consoleTextBrowser->append(tr("打开远程数据库表成功"));
+        }else{
+            QMessageBox::warning(this,"Error",tr("打开远程数据库表失败"));
+        }
+    }
+
+    if( !res1 ){
+        //local db have to be available
+        mDBTimer.start(2000);
+    }
+    if( !res2  ){
+        //local db have not to be available
+        //mDBTimer.start(5000);
+    }
+    if( res1 && res2 ){
+        if( ! mLeftTester.TesterThread->mStartTest &&  !mRightTester.TesterThread->mStartTest){
+            syncRemoteDataBase();
+        }
+    }
 }
 
 #include "qt_windows.h"
 #include <QtNetwork/QHostInfo>
+#include <QFileDialog>
 #include <QNetworkInterface>
 
 bool MainWindow::MySystemShutDown()
@@ -1376,6 +1480,56 @@ void MainWindow::on_testResultpushButton_right_clicked()
 
 void MainWindow::on_shutdownpushButton_clicked()
 {
+#if 0
+    QList<QStringList> records = mLocalDataBase.getRecord();
+    qDebug()<<records;
+    return;
+#endif
+#if 0
+    mDataBase.deleteRecord( "QRcode" , "CSWL-9711.1-B01-S01-19363-000003");
+    mLocalDataBase.deleteRecord( "QRcode" , "CSWL-9711.1-B01-S01-19363-000003");
+#endif
+#if 0
+    //qDebug()<<mLocalDataBase.getRecordList("Date", "20200101110011");
+    qDebug()<<mDataBase.getRecordList("Date", "20200101110011");
+    return;
+#endif
+#if 0
+    if( !mLocalDataBase.exportToFile("testExportLocal.txt",",") ){
+        ui->consoleTextBrowser->append( " local export dataBase file error ");
+    }
+
+    if( !mDataBase.exportToFile("testExport.txt",",") ){
+        ui->consoleTextBrowser->append( " remote export dataBase file error ");
+    }
+    return;
+#endif
+#if 0
+    //qDebug()<<mLocalDataBase.getRecord("CSWL-9711.1-B01-S01-19363-000003");
+    qDebug()<<mDataBase.getRecord("CSWL-9711.1-B01-S01-19363-000003");
+    return;
+#endif
+#if 0
+    static int cnt = 0;
+    TesterRecord res;
+    res.date="20200101110011";
+    res.errorCode= 1 ;
+    res.errorCodeParameter="errorparameter";
+    res.errorCodeString="no error";
+    res.LedAnimation = true;
+    for( int i=0; i< 12 ; i++){
+        res.LedFullLevel[i] = 730840;
+        res.LedMidLevel[i] = 218350;
+    }
+    res.QRcode="CSWL-9711.1-B01-S01-19363-00000"+QString::number(cnt++);
+    res.RloadCurrent = 1.5;
+    res.VDD = 3.5;
+    res.VLedFull = 1.8;
+    res.VLedMid = 0.8;
+    saveDataToFile(res);
+    return;
+#endif
+
     QMessageBox Msg(QMessageBox::Question, tr("警告"), tr("是否关闭电脑？"),QMessageBox::Yes | QMessageBox::No, NULL );
     if(  Msg.exec() == QMessageBox::Yes){
         MySystemShutDown();
@@ -1399,3 +1553,43 @@ void MainWindow::on_rightVmeterSelectcomboBox_2_currentIndexChanged(const QStrin
     //qDebug() << mVmeterType[arg1];
 }
 
+
+void MainWindow::on_importToLocalDBpushButton_2_clicked()
+{
+    // TXT file to local DB
+    QString fileName = QFileDialog::getOpenFileName(this,tr("选择导出文件"),QDir::currentPath(),"*.txt");
+
+    if( !fileName.isEmpty() ){
+        DataBaseHelper::ERROR_TYPE res = mLocalDataBase.importFromFile(fileName,",");
+        if( res == DataBaseHelper::ERROR_TYPE::OK ){
+            QMessageBox::warning(this,"Info",tr("己导入数据到本地数据库"));
+        }else{
+            if( res == DataBaseHelper::ERROR_TYPE::FILE_ERROR )
+                QMessageBox::warning(this,"Error",tr("导入数据到本地数据库失败，文件格式有问题"));
+            if( res == DataBaseHelper::ERROR_TYPE::SQL_CMD_ERROR )
+                QMessageBox::warning(this,"Error",tr("导入数据到本地数据库失败, 数据命令执行错误"));
+        }
+    }
+}
+
+
+
+void MainWindow::on_syncLocalDBToRemotepushButton_clicked()
+{
+    //local DB to remote DB
+    syncRemoteDataBase();
+}
+
+
+
+void MainWindow::on_exportRemoteDBpushButton_clicked()
+{
+    QString dir = QFileDialog::getExistingDirectory(this,tr("选择导出文件路径"),QDir::currentPath());
+    if( dir.isEmpty() ) return;
+    QString fileName = QDir::toNativeSeparators( dir +"/"+"CSWL_Tester_Data_Export_"+QDateTime::currentDateTime().toString("yyyyMMddhhmmss")+".txt" );
+    if( mDataBase.exportToFile( fileName , "," ) ){
+        QMessageBox::warning(this,"Info",tr("己成功导出数据在 %1").arg(fileName));
+    }else{
+        QMessageBox::warning(this,"Error",tr("导出数据失败"));
+    }
+}

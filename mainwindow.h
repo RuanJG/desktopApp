@@ -14,6 +14,7 @@
 #include <QSettings>
 #include <QFile>
 #include <QMap>
+#include "databasehelper.h"
 
 namespace Ui {
 class MainWindow;
@@ -52,7 +53,7 @@ private slots:
     void rightTesterThread_result(TesterRecord res);
     void rightTesterThread_error(QString errorStr);
 
-    void initTimerTrigger();
+    void DBTimerTrigger();
 
     void on_serialconnectPushButton_clicked();
 
@@ -127,6 +128,12 @@ private slots:
     void on_rightVmeterSelectcomboBox_2_currentIndexChanged(const QString &arg1);
 
 
+    void on_importToLocalDBpushButton_2_clicked();
+
+    void on_syncLocalDBToRemotepushButton_clicked();
+
+    void on_exportRemoteDBpushButton_clicked();
+
 private:
     Ui::MainWindow *ui;
 
@@ -157,8 +164,14 @@ private:
     QSettings mSetting;
     QMap<QString,QString> mSerialMap;
     int mRelayStatus;
-    QTimer mInitTimer;
+    QTimer mDBTimer;
     QMap<QString,int> mVmeterType;
+    DataBaseHelper mDataBase;
+    DataBaseHelper mLocalDataBase;
+    volatile bool mDBSyncing;
+    QString mTableName;
+    QStringList mTableItems;
+    QStringList mTableItemsSize;
 
     void update_serial_info();
     bool saveDataToFile(TesterRecord res);
@@ -172,6 +185,7 @@ private:
     bool isTesterValiable(TestTargetControler_t *tester);
     void serial_send_PMSG(TestTargetControler_t *tester, unsigned char tag, unsigned char *data, int data_len);
     bool MySystemShutDown();
+    void syncRemoteDataBase();
 };
 
 #endif // MAINWINDOW_H

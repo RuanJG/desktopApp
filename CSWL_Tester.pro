@@ -4,7 +4,7 @@
 #
 #-------------------------------------------------
 
-QT       += core gui network
+QT       += core gui network sql
 QT      += serialport
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -26,6 +26,7 @@ HEADERS  += mainwindow.h \
     libs/uartcoder.h \
     libs/util.h \
     testerthread.h \
-    D:/Qt/Qt5.6.2/5.6/mingw49_32/include/QtCore/qt_windows.h
+    D:/Qt/Qt5.6.2/5.6/mingw49_32/include/QtCore/qt_windows.h \
+    databasehelper.h
 
 FORMS    += mainwindow.ui
