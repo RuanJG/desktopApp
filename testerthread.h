@@ -45,7 +45,7 @@
 #define LED_MID_LOW_LEVEL  180000
 
 //animation brightness range
-#define LED_ANIMATION_MID_MAX_LEVEL  60000
+#define LED_ANIMATION_MID_MAX_LEVEL  150000 //60000
 #define LED_ANIMATION_MID_MIN_LEVEL  20000
 //#define LED_ANIMATION_HIGH_LOW_LEVEL  650000
 
@@ -109,7 +109,7 @@ public:
     volatile bool mNextStep;
     volatile bool mStartTest;
     volatile bool mExitcmd;
-
+    volatile int mVmeterType;
 
 
 
@@ -154,9 +154,11 @@ private:
     float VMeter_value;
     volatile int VMeter_current_cnt;
     float VMeter_value_current;
-
     QMutex mMutex;
+
+
     void sendcmd(int tag, int data);
+    void sendcmd(unsigned char tag, QByteArray data);
     void testThread_reset();
     int testLedAnimationLoop();
     void testThread_clear_data(int led_mean_cnt, int vmeter_mean_cnt);
@@ -185,8 +187,8 @@ private:
 #define setMeasureNone() sendcmd(PC_TAG_CMD_SWITCHES_CHANNEL,0x0f)
 #define setLedCaptureStart() sendcmd(PC_TAG_CMD_CAPTURE_EN,0x1)
 #define setLedCaptureStop() sendcmd(PC_TAG_CMD_CAPTURE_EN,0x0)
-#define setVmeterReadStart() sendcmd(PC_TAG_CMD_VMETER_READ,0x1)
-#define setVmeterReadStop() sendcmd(PC_TAG_CMD_VMETER_READ,0x0)
+#define setVmeterReadStart(X) sendcmd(PC_TAG_CMD_VMETER_READ,X)
+#define setVmeterReadStop() sendcmd(PC_TAG_CMD_VMETER_READ,0)
 #define setAlloff() { setVmeterReadStop();setLedCaptureStop();setNormalMode(); mRelayStatus = 0;sendcmd(PC_TAG_CMD_SWITCH,mRelayStatus); setMeasureNone();}
 
 

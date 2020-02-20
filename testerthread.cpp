@@ -110,12 +110,15 @@ void TesterThread::debug_step(bool start)
 
 
 
-
-
-
-
-
-
+void TesterThread::sendcmd(unsigned char tag, QByteArray data)
+{
+    QByteArray cmdBA;
+    cmdBA.append(tag);
+    cmdBA.append(data);
+    //qDebug()<< "thread send cmd : 0x"+QByteArray((char*)cmd,2).toHex();
+    //emit sendSerialCmd( BORAD_ID , cmd, 2);
+    emit sendSerialCmd(BORAD_ID ,cmdBA);
+}
 
 void TesterThread::sendcmd(int tag, int data)
 {
@@ -171,8 +174,8 @@ void TesterThread::run()
     TesterRecord testRes;
     QString qrcodeExample = "CSWL-9711.1-B01-S01-19325-000008";
     bool keepTestEvenNG = false;
-    int poweroffMs = 300;
-    int switchmodeMs = 1000;
+    int poweroffMs = 500;
+    int switchmodeMs = 1500;
 
 
 
@@ -194,7 +197,7 @@ void TesterThread::run()
                 return;
             }
             Rmsleep(10);
-            //emit log(QString::number(retry++));
+            ///emit log(QString::number(retry++));
         }
 
 
@@ -209,7 +212,7 @@ void TesterThread::run()
         checkEven();
     //start Vmeter
         emit log("AutoTest: 2  开启万用表");
-        setVmeterReadStart();
+        setVmeterReadStart(mVmeterType);
     //press down the PCBA
         emit log("AutoTest: 3  等待压板");
         setAirCylinderOn();
@@ -220,15 +223,18 @@ void TesterThread::run()
         cmd[0]=0x16; cmd[1] =0x54; cmd[2]=0x0D;
         QByteArray scancmd = QByteArray((char*)cmd,3);
         QRcode_update = false;
-        for( retry = 0, timeoutMs = 0;  retry < 1 ; retry++){
+        //scan timout is about 5s
+        for( retry = 0, timeoutMs = 0;  retry < 2 ; retry++){
             emit sendSerialCmd(SCANER_ID ,scancmd);
             while(!QRcode_update){
-                Rmsleep(10);
-                timeoutMs+=10;
+                Rmsleep(100);
+                timeoutMs+=100;
                 if( mExitcmd || !mStartTest ) break;
-                if( timeoutMs >= 5000 ) break;
+                if( timeoutMs >= 6000 ) break;
             }
             if( QRcode_update )break;
+            if( mExitcmd || !mStartTest ) break;
+            timeoutMs = 0;
         }
         if( QRcode_update ) {
             testRes.QRcode = QRcode;
@@ -254,7 +260,7 @@ void TesterThread::run()
         emit log("AutoTest: 4 TP300 connect to TP107");
         setNormalMode();
         setTest2Mode();
-        Rmsleep(20);
+        Rmsleep(100);
         checkEven();
     //power on
         emit log("AutoTest: 5 Power On 15V");
@@ -271,14 +277,14 @@ void TesterThread::run()
         setMeasureLED();
         setConnectMeasureVmeter();
         setLedCaptureStart();
-        Rmsleep(2000);
+        Rmsleep(1000);
         //LedBrightness_update_mean_cnt = 10;
         //LedBrightness_update = false;
-        testThread_clear_data(10,5);
+        testThread_clear_data(10,3);
         timeoutMs = 0;
         while(!LedBrightness_update){
-            Rmsleep(10);
-            timeoutMs+=10;
+            Rmsleep(100);
+            timeoutMs+=100;
             if( mExitcmd || !mStartTest ) break;
             if( timeoutMs >= 1000 ) break;
         }
@@ -309,8 +315,8 @@ void TesterThread::run()
         emit log("AutoTest: 8 Verify Led Voltage");
         timeoutMs = 0;
         while(!VMeter_update){
-            Rmsleep(10);
-            timeoutMs+=10;
+            Rmsleep(100);
+            timeoutMs+=100;
             if( mExitcmd || !mStartTest ) break;
             if( timeoutMs >= 2000 ) break;
         }
@@ -338,16 +344,16 @@ void TesterThread::run()
         emit log("AutoTest: 9 Verify VDD");
         setMeasureVDD();
         setConnectMeasureVmeter();
-        Rmsleep(100);
+        Rmsleep(1000);
         //VMeter_update_mean_cnt = 5;
         //VMeter_update = false;
-        testThread_clear_data(1,5);
+        testThread_clear_data(1,3);
         timeoutMs = 0;
         while(!VMeter_update){
-            Rmsleep(10);
-            timeoutMs+=10;
+            Rmsleep(100);
+            timeoutMs+=100;
             if( mExitcmd || !mStartTest ) break;
-            if( timeoutMs >= 2000 ) break;
+            if( timeoutMs >= 2500 ) break;
         }
         if( VMeter_update ){
             testRes.VDD = VMeter_value;
@@ -381,7 +387,7 @@ void TesterThread::run()
         setPowerOn();
         Rmsleep(switchmodeMs);
         setNormalMode();
-        Rmsleep(20);
+        Rmsleep(100);
         checkEven();
     //Verify Led mid brighness
         emit log("AutoTest: 12 Verify Led Mid brighness");
@@ -391,11 +397,11 @@ void TesterThread::run()
         Rmsleep(1000);
         //LedBrightness_update_mean_cnt = 10;
         //LedBrightness_update = false;
-        testThread_clear_data(10,5);
+        testThread_clear_data(10,3);
         timeoutMs = 0;
         while(!LedBrightness_update){
-            Rmsleep(10);
-            timeoutMs+=10;
+            Rmsleep(100);
+            timeoutMs+=100;
             if( mExitcmd || !mStartTest ) break;
             if( timeoutMs >= 1000 ) break;
         }
@@ -422,10 +428,10 @@ void TesterThread::run()
         emit log("AutoTest: 13 Verify Led mid current");
         timeoutMs = 0;
         while(!VMeter_update){
-            Rmsleep(10);
-            timeoutMs+=10;
+            Rmsleep(100);
+            timeoutMs+=100;
             if( mExitcmd || !mStartTest ) break;
-            if( timeoutMs >= 2000 ) break;
+            if( timeoutMs >= 2500 ) break;
         }
         if( VMeter_update ){
             testRes.VLedMid = VMeter_value;
@@ -462,7 +468,7 @@ void TesterThread::run()
         setPowerOn();
         Rmsleep(switchmodeMs);
         setNormalMode();
-        Rmsleep(20);
+        Rmsleep(100);
         checkEven();
 
         setConnectOutVmeter();
@@ -470,13 +476,13 @@ void TesterThread::run()
 
         //Verify Led half on , half off
         setLedCaptureStart();
-        Rmsleep(100);
+        Rmsleep(1000);
         ledhalfonTimeoutMs = 0;
         bool ledhalfon = false;
 
         //LedBrightness_update_mean_cnt = 10;
         //LedBrightness_update = false;
-        testThread_clear_data(1,5);
+        testThread_clear_data(1,3);
         while( ledhalfonTimeoutMs < 3000)
         {
             timeoutMs = 0;
@@ -526,8 +532,8 @@ void TesterThread::run()
         emit log("AutoTest: 16 Verify RLoad current");
         timeoutMs = 0;
         while(!VMeter_update){
-            Rmsleep(10);
-            timeoutMs+=10;
+            Rmsleep(100);
+            timeoutMs+=100;
             if( mExitcmd || !mStartTest ) break;
             if( timeoutMs >= 2000 ) break;
         }
@@ -621,7 +627,7 @@ void TesterThread::run()
         //LedBrightness_update = false;
         testThread_clear_data(1,1);
         int res;
-        int animationTimeoutMs = 4000;
+        int animationTimeoutMs = 10000;
         bool checkRes;
 
         checkRes = false;
@@ -701,7 +707,7 @@ int TesterThread::testLedAnimationLoop()
     {
 
     case 0:{
-        //check all full light
+        //check if all full light
         checkOK = true;
         for( int i=0; i<12; i++ ){
             if( LedBrightness[i] < LED_FULL_LOW_LEVEL) {
@@ -715,7 +721,7 @@ int TesterThread::testLedAnimationLoop()
         break;
     }
     case 1:{
-#if 1 //check all mid light
+#if 1 //check if all mid light
 
         for( int i=0; i< 12; i++){
             if( LedBrightness[i] < LED_ANIMATION_MID_MIN_LEVEL ){
@@ -728,10 +734,14 @@ int TesterThread::testLedAnimationLoop()
             }
         }
 
-        if(  mLedAnimationMidIndex == 0xfff) {
+        if(  (mLedAnimationMidIndex == 0xfff) ) {
             emit log("Step1 OK");
             mLedAnimationStep++;
+            //return 1;
+        }else{
+            //emit log("LED mid status= 0x"+QString::number(mLedAnimationMidIndex,16)+", led12="+QString::number( LedBrightness[11]));
         }
+
 #else
         mLedAnimationStep++;
 #endif

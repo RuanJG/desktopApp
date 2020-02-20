@@ -2,6 +2,9 @@
 #include "ui_mainwindow.h"
 #include <QMessageBox>
 #include "qmetatype.h"
+#include <QHostInfo>
+#include <QHostAddress>
+#include <QNetworkInterface>
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -10,9 +13,10 @@ MainWindow::MainWindow(QWidget *parent) :
     mRightTester(),
     mTxtfile(),
     mDataMutex(),
-    mSetting(qApp->applicationDirPath()+"\/Setting.ini",QSettings::IniFormat),
+    mSetting(qApp->applicationDirPath()+"/Setting.ini",QSettings::IniFormat),
     mSerialMap(),
-    mInitTimer()
+    mInitTimer(),
+    mVmeterType()
 {
     ui->setupUi(this);
 
@@ -65,6 +69,27 @@ MainWindow::MainWindow(QWidget *parent) :
 
     update_serial_info();
 
+
+    //Vmeter type
+    mVmeterType.insert("VICTOR8165",1);
+    mVmeterType.insert("TH963",2);
+    QString defType = "TH963";
+
+    QStringList vmeterlist;
+    QMap<QString,int>::Iterator it=mVmeterType.begin();
+    while( it != mVmeterType.end()){
+        vmeterlist.append(it.key());
+        it++;
+    }
+    QString leftVmeter = mSetting.value("LeftVmeterType",defType).toString();
+    QString rightVmeter = mSetting.value("RightVmeterType",defType).toString();
+    ui->leftVmeterSelectcomboBox->addItems(vmeterlist);
+    ui->leftVmeterSelectcomboBox->setCurrentText(leftVmeter);
+    ui->rightVmeterSelectcomboBox_2->addItems(vmeterlist);
+    ui->rightVmeterSelectcomboBox_2->setCurrentText(rightVmeter);
+
+
+#if 0
     connect( &mInitTimer, SIGNAL(timeout()),this,SLOT(initTimerTrigger()));
     ui->VmeterStartcheckBox->clicked(true);
     ui->VmeterStartcheckBox->setCheckState(Qt::CheckState::Checked);
@@ -75,6 +100,43 @@ MainWindow::MainWindow(QWidget *parent) :
     mRightTester.initBits = 0;
     mRightTester.initCounter=0;
     mInitTimer.start(5000);
+#else
+    mLeftTester.ininted = true;
+    mRightTester.ininted = true;
+#endif
+
+
+
+#if 1
+
+    QHostInfo info = QHostInfo::fromName(QHostInfo::localHostName());
+    ui->consoleTextBrowser->append("Server HostName:"+QHostInfo::localHostName());
+    ui->consoleTextBrowser->append("Server IP:");
+    foreach(QHostAddress address,info.addresses())
+    {
+        if(address.protocol() == QAbstractSocket::IPv4Protocol){
+            ui->consoleTextBrowser->append(address.toString());
+        }
+    }
+
+    QList<QNetworkInterface> nets = QNetworkInterface::allInterfaces();// 获取所有网络接口列表
+    int nCnt = nets.count();
+    QString strMacAddr = "";
+    int i;
+    for(i = 0; i < nCnt; i ++)
+    {
+        // 如果此网络接口被激活并且正在运行并且不是回环地址，则就是我们需要找的Mac地址
+        if(nets[i].flags().testFlag(QNetworkInterface::IsUp) && nets[i].flags().testFlag(QNetworkInterface::IsRunning)
+                && !nets[i].flags().testFlag(QNetworkInterface::IsLoopBack))
+        {
+            strMacAddr = nets[i].hardwareAddress();
+            ui->consoleTextBrowser->append( nets[i].name() +":  " + strMacAddr);
+            break;
+        }
+    }
+    //if( nCnt > 0 ) ui->consoleTextBrowser->append("Interface "+nets[i].name()+".   MAC:" +strMacAddr );
+#endif
+
 }
 
 MainWindow::~MainWindow()
@@ -122,7 +184,7 @@ bool MainWindow::saveDataToFile(TesterRecord res){
     if( mTxtfile.size() ==0 ){
         QString title = "Date,QRcode,ErrorCode,VDD";
         title = title+",VLED_100";
-        title = title+",VLED_50";
+        title = title+",VLED_30";
         title = title+",Rload_current(A)";
         title = title+",LED_Animation";
         for( int i=1; i<=12; i++ ) title = title+",LED"+QString::number(i)+"_100";
@@ -305,12 +367,16 @@ bool MainWindow::open_serial(TestTargetControler_t *tester)
     tester->SerialportMutex.unlock();
 
     if( ! res ){
-        if(tester->Serialport!=NULL)
+        if(tester->Serialport!=NULL){
             delete tester->Serialport;
+            tester->Serialport = NULL;
+        }
     }
     if( ! res2 ){
-        if( tester->Scanerserialport!=NULL)
+        if( tester->Scanerserialport!=NULL){
             delete tester->Scanerserialport;
+            tester->Scanerserialport = NULL;
+        }
     }
 
     if( tester->Serialport != NULL){
@@ -462,6 +528,7 @@ void MainWindow::handle_Serial_Data( TestTargetControler_t* tester, QByteArray &
                 if( cnt != 48){
                     ui->consoleTextBrowser->append(testerTag+" LED data error");
                 }else{
+
                     unsigned char *pd = (unsigned char*) tester->mLedBrightness;
                     for(int i=0 ;i<cnt;i++){
                         pd[i] = data[i];
@@ -497,8 +564,8 @@ void MainWindow::handle_Serial_Data( TestTargetControler_t* tester, QByteArray &
                         ui->led11lineEdit_right->setText(QString::number(tester->mLedBrightness[10]));
                         ui->led12lineEdit_right->setText(QString::number(tester->mLedBrightness[11]));
                     }
-
-
+                     //mLedBrightness_update ++;
+                     //ui->led12lineEdit->setText(QString::number(mLedBrightness_update));
                }
             }else if(tag == PC_TAG_DATA_VMETER){
                 if( cnt == 4){
@@ -573,9 +640,9 @@ void MainWindow::serial_send_packget( TestTargetControler_t* tester, const Chunk
         if ( tester->Encoder.encode(chunk.getData(),chunk.getSize(),pChunk) ){
             int count = tester->Serialport->write( (const char*) pChunk.getData(), pChunk.getSize() );
             //qDebug() << "cmd: 0x"+QByteArray((const char*) chunk.getData(), chunk.getSize()).toHex();
-            qDebug() << "packget: 0x"+QByteArray((const char*) pChunk.getData(), pChunk.getSize()).toHex();
+            //qDebug() << "packget: 0x"+QByteArray((const char*) pChunk.getData(), pChunk.getSize()).toHex();
             if( count != pChunk.getSize() ){
-                qDebug() << "serial_send_packget: send data to serial false \n" << endl;
+                ui->consoleTextBrowser->append( "serial_send_packget: send data to serial false \n" );
             }
         }
     }
@@ -598,7 +665,8 @@ void MainWindow::scaner_send_cmd( TestTargetControler_t* tester, unsigned char *
 {
     //mSerialMutex.lock();
 
-    if( isTesterValiable(tester) ){
+    //if( isTesterValiable(tester) ){
+    if( tester->Scanerserialport != NULL ) {
         tester->Scanerserialport->write((char*) data,len );
     }
 
@@ -622,8 +690,8 @@ void MainWindow::sendcmd(int tag, int data)
 
 
 bool MainWindow::isTesterValiable( TestTargetControler_t* tester ){
-    if( tester->Serialport!=NULL && tester->Serialport->isOpen() \
-            && tester->Scanerserialport!=NULL && tester->Scanerserialport->isOpen()){
+    //if( tester->Serialport!=NULL && tester->Serialport->isOpen() && tester->Scanerserialport!=NULL && tester->Scanerserialport->isOpen()){
+    if( tester->Serialport!=NULL && tester->Serialport->isOpen() ){
         return true;
     }
     return false;
@@ -1022,18 +1090,18 @@ void MainWindow::on_measuretoVmetercheckBox_5_clicked(bool checked)
 
 void MainWindow::on_VmeterStartcheckBox_clicked(bool checked)
 {
-    unsigned char data;
-
-    data = checked?0x01:0x00;
+    unsigned char data[2];
 
     if( isTesterValiable(&mLeftTester) ){
-        serial_send_PMSG(&mLeftTester,PC_TAG_CMD_VMETER_READ, &data, 1);
-        ui->consoleTextBrowser->append("Left Vmeter Read "+QString(checked?"On":"Off"));
+        data[0] =  checked ? mLeftTester.TesterThread->mVmeterType : 0x00 ;
+        serial_send_PMSG(&mLeftTester,PC_TAG_CMD_VMETER_READ, data, 1);
+        ui->consoleTextBrowser->append("Left Vmeter "+ui->leftVmeterSelectcomboBox->currentText()+QString(checked?"On":"Off"));
     }
 
     if( isTesterValiable(&mRightTester) ){
-        serial_send_PMSG(&mRightTester,PC_TAG_CMD_VMETER_READ, &data, 1);
-        ui->consoleTextBrowser->append("Right Vmeter Read "+QString(checked?"On":"Off"));
+        data[0] =  checked ? mRightTester.TesterThread->mVmeterType : 0x00;
+        serial_send_PMSG(&mRightTester,PC_TAG_CMD_VMETER_READ, data, 1);
+        ui->consoleTextBrowser->append("Right Vmeter "+ui->rightVmeterSelectcomboBox_2->currentText()+QString(checked?"On":"Off"));
     }
 }
 
@@ -1108,13 +1176,13 @@ void MainWindow::on_scanerStartpushButton_clicked()
 {
     unsigned char cmd[3] = {0x16,0x54,0x0D};
 
-    if( isTesterValiable(&mLeftTester) ){
+    //if( isTesterValiable(&mLeftTester) ){
         scaner_send_cmd(&mLeftTester,cmd,sizeof(cmd));
-    }
+    //}
 
-    if( isTesterValiable(&mRightTester) ){
+    //if( isTesterValiable(&mRightTester) ){
         scaner_send_cmd(&mRightTester,cmd,sizeof(cmd));
-    }
+    //}
 }
 
 
@@ -1263,6 +1331,8 @@ void MainWindow::initTimerTrigger()
 }
 
 #include "qt_windows.h"
+#include <QtNetwork/QHostInfo>
+#include <QNetworkInterface>
 
 bool MainWindow::MySystemShutDown()
 {
@@ -1313,3 +1383,19 @@ void MainWindow::on_shutdownpushButton_clicked()
         // ignore
     }
 }
+
+
+void MainWindow::on_leftVmeterSelectcomboBox_currentIndexChanged(const QString &arg1)
+{
+    mSetting.setValue("LeftVmeterType",arg1);
+    mLeftTester.TesterThread->mVmeterType = mVmeterType[arg1];
+    //qDebug() << mVmeterType[arg1];
+}
+
+void MainWindow::on_rightVmeterSelectcomboBox_2_currentIndexChanged(const QString &arg1)
+{
+    mSetting.setValue("RightVmeterType",arg1);
+    mRightTester.TesterThread->mVmeterType = mVmeterType[arg1];
+    //qDebug() << mVmeterType[arg1];
+}
+

@@ -122,6 +122,11 @@ private slots:
 
     void on_shutdownpushButton_clicked();
 
+    void on_leftVmeterSelectcomboBox_currentIndexChanged(const QString &arg1);
+
+    void on_rightVmeterSelectcomboBox_2_currentIndexChanged(const QString &arg1);
+
+
 private:
     Ui::MainWindow *ui;
 
@@ -153,6 +158,7 @@ private:
     QMap<QString,QString> mSerialMap;
     int mRelayStatus;
     QTimer mInitTimer;
+    QMap<QString,int> mVmeterType;
 
     void update_serial_info();
     bool saveDataToFile(TesterRecord res);
