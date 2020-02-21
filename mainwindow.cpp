@@ -1560,7 +1560,7 @@ void MainWindow::on_importToLocalDBpushButton_2_clicked()
     QString fileName = QFileDialog::getOpenFileName(this,tr("选择导出文件"),QDir::currentPath(),"*.txt");
 
     if( !fileName.isEmpty() ){
-        DataBaseHelper::ERROR_TYPE res = mLocalDataBase.importFromFile(fileName,","); //"Date"
+        DataBaseHelper::ERROR_TYPE res = mLocalDataBase.importFromFile(fileName,",", "Date");
         if( res == DataBaseHelper::ERROR_TYPE::OK ){
             QMessageBox::warning(this,"Info",tr("己导入数据到本地数据库"));
         }else{
