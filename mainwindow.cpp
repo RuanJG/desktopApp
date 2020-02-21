@@ -1560,7 +1560,7 @@ void MainWindow::on_importToLocalDBpushButton_2_clicked()
     QString fileName = QFileDialog::getOpenFileName(this,tr("选择导出文件"),QDir::currentPath(),"*.txt");
 
     if( !fileName.isEmpty() ){
-        DataBaseHelper::ERROR_TYPE res = mLocalDataBase.importFromFile(fileName,",");
+        DataBaseHelper::ERROR_TYPE res = mLocalDataBase.importFromFile(fileName,","); //"Date"
         if( res == DataBaseHelper::ERROR_TYPE::OK ){
             QMessageBox::warning(this,"Info",tr("己导入数据到本地数据库"));
         }else{
@@ -1586,10 +1586,12 @@ void MainWindow::on_exportRemoteDBpushButton_clicked()
 {
     QString dir = QFileDialog::getExistingDirectory(this,tr("选择导出文件路径"),QDir::currentPath());
     if( dir.isEmpty() ) return;
-    QString fileName = QDir::toNativeSeparators( dir +"/"+"CSWL_Tester_Data_Export_"+QDateTime::currentDateTime().toString("yyyyMMddhhmmss")+".txt" );
+    QString fileName = QDir::toNativeSeparators( dir +"/"+"CSWL_Tester_Data_DataBase_Export_"+QDateTime::currentDateTime().toString("yyyyMMddhhmmss")+".txt" );
     if( mDataBase.exportToFile( fileName , "," ) ){
         QMessageBox::warning(this,"Info",tr("己成功导出数据在 %1").arg(fileName));
     }else{
         QMessageBox::warning(this,"Error",tr("导出数据失败"));
     }
+    fileName = QDir::toNativeSeparators( dir +"/"+"CSWL_Tester_Data_Local_Export_"+QDateTime::currentDateTime().toString("yyyyMMddhhmmss")+".txt" );
+    mLocalDataBase.exportToFile( fileName , "," );
 }

@@ -378,7 +378,12 @@ public:
 
     }
 
-    ERROR_TYPE importFromFile(QString filename, QString splitStr)
+    ERROR_TYPE importFromFile(QString filename, QString splitStr )
+    {
+        return importFromFile(filename,splitStr,"");
+    }
+
+    ERROR_TYPE importFromFile(QString filename, QString splitStr, QString compareTableItem)
     {
         QFile file;
         file.setFileName(filename);
@@ -390,6 +395,11 @@ public:
 
         QStringList record;
         QList<QStringList> recordList;
+        int compareItemIndex = -1 ;
+
+        if( compareTableItem.length() > 0 ){
+            compareItemIndex = mTableItems.indexOf(compareTableItem);
+        }
 
         while( file.pos() < file.size() )
         {
@@ -412,6 +422,13 @@ public:
         }
 
         foreach (QStringList r , recordList) {
+            if( compareItemIndex != -1 ){
+                record = getRecord(r[0]);
+                //if this record exits and equart or new than the file one, ignore it
+                if( record.size() > 0 && QString::compare(record[compareItemIndex], r[compareItemIndex],Qt::CaseInsensitive) >= 0 ){
+                    continue;
+                }
+            }
             if( ! flushRecord(r)){
                 file.close();
                 return SQL_CMD_ERROR;
